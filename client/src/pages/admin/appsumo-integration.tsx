@@ -17,7 +17,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import {
   CheckCircle,
   XCircle,
@@ -34,6 +34,8 @@ import {
   Webhook,
   KeyRound,
   Globe,
+  Pencil,
+  X,
 } from "lucide-react";
 import { TIER_LABELS } from "@/lib/constants";
 
@@ -127,6 +129,111 @@ function SecretField({ value, label }: { value: string | null; label: string }) 
         {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
       </button>
       <CopyButton value={value} />
+    </div>
+  );
+}
+
+function EditableSecretField({
+  label,
+  fieldKey,
+  value,
+  partnerId,
+}: {
+  label: string;
+  fieldKey: string;
+  value: string | null;
+  partnerId: number;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [visible, setVisible] = useState(false);
+  const { toast } = useToast();
+
+  const saveMutation = useMutation({
+    mutationFn: (newValue: string) =>
+      apiRequest("PUT", `/api/admin/partners/${partnerId}`, { [fieldKey]: newValue }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/test/partner-config"] });
+      toast({ title: `${label} saved successfully` });
+      setEditing(false);
+      setDraft("");
+    },
+    onError: (err: Error) => {
+      toast({ title: `Failed to save ${label}`, description: err.message, variant: "destructive" });
+    },
+  });
+
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={`Paste ${label} from AppSumo Partner Portal`}
+          className="h-8 text-xs font-mono flex-1"
+          autoFocus
+          data-testid={`input-${fieldKey}`}
+        />
+        <Button
+          size="sm"
+          className="h-8 px-3 text-xs"
+          onClick={() => saveMutation.mutate(draft.trim())}
+          disabled={!draft.trim() || saveMutation.isPending}
+          data-testid={`button-save-${fieldKey}`}
+        >
+          {saveMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Save"}
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          onClick={() => { setEditing(false); setDraft(""); }}
+          data-testid={`button-cancel-${fieldKey}`}
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  if (!value) {
+    return (
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground italic flex-1">Not configured</span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 px-2 text-xs"
+          onClick={() => setEditing(true)}
+          data-testid={`button-set-${fieldKey}`}
+        >
+          <Pencil className="h-3 w-3 mr-1" />
+          Set
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border bg-muted/40 px-3 py-2">
+      <code className="flex-1 text-xs font-mono break-all">
+        {visible ? value : "•".repeat(Math.min(value.length, 40))}
+      </code>
+      <button
+        onClick={() => setVisible((v) => !v)}
+        className="text-muted-foreground hover:text-foreground"
+        data-testid={`button-toggle-${fieldKey}`}
+      >
+        {visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+      </button>
+      <CopyButton value={value} />
+      <button
+        onClick={() => { setDraft(value); setEditing(true); }}
+        className="text-muted-foreground hover:text-foreground"
+        data-testid={`button-edit-${fieldKey}`}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </button>
     </div>
   );
 }
@@ -749,7 +856,7 @@ function OAuthSetup({ config, baseUrl }: { config: PartnerConfig; baseUrl: strin
     { label: "API key configured", ok: !!config.apiKey },
     { label: "Webhook secret configured", ok: !!config.webhookSecret },
     { label: "OAuth client ID configured", ok: !!config.oauthClientId },
-    { label: "OAuth client secret configured", ok: config.oauthClientSecret === "configured" },
+    { label: "OAuth client secret configured", ok: !!config.oauthClientSecret },
   ];
 
   return (
@@ -804,7 +911,21 @@ function OAuthSetup({ config, baseUrl }: { config: PartnerConfig; baseUrl: strin
           </div>
           <div>
             <Label className="text-xs mb-1 block">OAuth Client ID <span className="text-muted-foreground">(from AppSumo Portal → paste here)</span></Label>
-            <SecretField value={config.oauthClientId} label="oauth-client-id" />
+            <EditableSecretField
+              label="OAuth Client ID"
+              fieldKey="oauthClientId"
+              value={config.oauthClientId}
+              partnerId={config.id}
+            />
+          </div>
+          <div>
+            <Label className="text-xs mb-1 block">OAuth Client Secret <span className="text-muted-foreground">(from AppSumo Portal → paste here)</span></Label>
+            <EditableSecretField
+              label="OAuth Client Secret"
+              fieldKey="oauthClientSecret"
+              value={config.oauthClientSecret}
+              partnerId={config.id}
+            />
           </div>
         </div>
       </div>
