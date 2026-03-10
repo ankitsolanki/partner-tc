@@ -11,6 +11,7 @@ declare module "express-session" {
     isAdmin?: boolean;
     pendingLicenseKey?: string;
     oauthState?: string;
+    keycloakCodeVerifier?: string;
   }
 }
 

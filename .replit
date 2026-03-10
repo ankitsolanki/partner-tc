@@ -46,3 +46,7 @@ expertMode = true
 
 [userenv.shared]
 APP_BASE_URL = "https://1288c23b-87f5-413d-9d65-ad3dfb89f4f4-00-35xwm8oq7i9dh.spock.replit.dev"
+KEYCLOAK_AUTH_SERVER_URL = "https://accounts.gofo.app/"
+KEYCLOAK_REALM = "oute"
+KEYCLOAK_CLIENT_ID = "oute-ic-canvas"
+KEYCLOAK_LOGIN_URL = "https://account.oute.app"
