@@ -25,7 +25,6 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { AdminLayout } from "@/components/layout/admin-layout";
 import { StatsCard } from "@/components/shared/stats-card";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -62,15 +61,18 @@ import type { z } from "zod";
 type CreateUserValues = z.infer<typeof createPartnerUserFormSchema>;
 type GenerateKeysValues = z.infer<typeof generateLicensesSchema>;
 
-interface PartnerDetail extends Partner {
-  stats?: {
-    generated: number;
-    consumed: number;
-    redeemed: number;
-    available: number;
-    deactivated: number;
-    upgraded: number;
-  };
+interface PartnerStats {
+  totalGenerated: number;
+  totalConsumed: number;
+  totalRedeemed: number;
+  totalAvailable: number;
+  totalDeactivated: number;
+  totalUpgraded: number;
+}
+
+interface PartnerDetail {
+  partner: Partner;
+  stats: PartnerStats;
 }
 
 function SecretField({ label, value, testId }: { label: string; value: string | null; testId: string }) {
@@ -354,7 +356,7 @@ export default function AdminPartnerDetail() {
   const [match, params] = useRoute("/admin/partners/:id");
   const partnerId = params?.id ? Number(params.id) : 0;
 
-  const { data: partner, isLoading: partnerLoading } = useQuery<PartnerDetail>({
+  const { data, isLoading: partnerLoading } = useQuery<PartnerDetail>({
     queryKey: ["/api/admin/partners", partnerId],
     enabled: !!partnerId,
   });
@@ -363,6 +365,9 @@ export default function AdminPartnerDetail() {
     queryKey: ["/api/admin/partners", partnerId, "users"],
     enabled: !!partnerId,
   });
+
+  const partner = data?.partner;
+  const stats = data?.stats;
 
   if (!match) return null;
 
@@ -403,14 +408,14 @@ export default function AdminPartnerDetail() {
               </Card>
             ))}
           </div>
-        ) : partner?.stats ? (
+        ) : stats ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatsCard label="Generated" value={partner.stats.generated} icon={Key} data-testid="stat-generated" />
-            <StatsCard label="Consumed" value={partner.stats.consumed} icon={Key} data-testid="stat-consumed" />
-            <StatsCard label="Redeemed" value={partner.stats.redeemed} icon={CheckCircle} data-testid="stat-redeemed" />
-            <StatsCard label="Available" value={partner.stats.available} icon={Key} data-testid="stat-available" />
-            <StatsCard label="Deactivated" value={partner.stats.deactivated} icon={Key} data-testid="stat-deactivated" />
-            <StatsCard label="Upgraded" value={partner.stats.upgraded} icon={Key} data-testid="stat-upgraded" />
+            <StatsCard label="Generated" value={stats.totalGenerated} icon={Key} data-testid="stat-generated" />
+            <StatsCard label="Consumed" value={stats.totalConsumed} icon={Key} data-testid="stat-consumed" />
+            <StatsCard label="Redeemed" value={stats.totalRedeemed} icon={CheckCircle} data-testid="stat-redeemed" />
+            <StatsCard label="Available" value={stats.totalAvailable} icon={Key} data-testid="stat-available" />
+            <StatsCard label="Deactivated" value={stats.totalDeactivated} icon={Key} data-testid="stat-deactivated" />
+            <StatsCard label="Upgraded" value={stats.totalUpgraded} icon={Key} data-testid="stat-upgraded" />
           </div>
         ) : null}
 
@@ -430,10 +435,13 @@ export default function AdminPartnerDetail() {
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-xs text-muted-foreground">Status</span>
-                    <StatusBadge
-                      status={partner.isActive ? "redeemed" : "deactivated"}
+                    <Badge
+                      variant={partner.isActive ? "default" : "secondary"}
+                      className="w-fit no-default-hover-elevate"
                       data-testid="badge-partner-active"
-                    />
+                    >
+                      {partner.isActive ? "Active" : "Inactive"}
+                    </Badge>
                   </div>
                   {partner.contactEmail && (
                     <div className="flex flex-col gap-1">
@@ -490,10 +498,13 @@ export default function AdminPartnerDetail() {
                             Admin
                           </Badge>
                         )}
-                        <StatusBadge
-                          status={user.isActive ? "redeemed" : "deactivated"}
+                        <Badge
+                          variant={user.isActive ? "default" : "secondary"}
+                          className="no-default-hover-elevate text-xs"
                           data-testid={`badge-user-status-${user.id}`}
-                        />
+                        >
+                          {user.isActive ? "Active" : "Inactive"}
+                        </Badge>
                       </div>
                     </div>
                   ))}
