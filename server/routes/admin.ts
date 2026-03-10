@@ -326,11 +326,11 @@ router.get("/stats", requireAdminAuth, async (_req, res) => {
   let totalRedeemed = 0;
   let totalActive = 0;
 
-  const perPartner = [];
+  const partnerSummaries = [];
 
   for (const partner of partnersList) {
     const stats = await storage.getPartnerStats(partner.id);
-    const partnerTotal =
+    const totalCreated =
       stats.totalGenerated +
       stats.totalConsumed +
       stats.totalRedeemed +
@@ -338,18 +338,24 @@ router.get("/stats", requireAdminAuth, async (_req, res) => {
       stats.totalUpgraded +
       stats.totalDowngraded;
 
-    totalKeys += partnerTotal;
+    totalKeys += totalCreated;
     totalRedeemed += stats.totalRedeemed;
     totalActive += stats.totalGenerated;
 
-    perPartner.push({
-      partnerId: partner.id,
-      partnerName: partner.displayName ?? partner.name,
-      totalKeys: partnerTotal,
-      generated: stats.totalGenerated,
+    partnerSummaries.push({
+      id: partner.id,
+      name: partner.name,
+      displayName: partner.displayName,
+      contactEmail: partner.contactEmail,
+      isActive: partner.isActive,
+      totalCreated,
+      available: stats.totalGenerated,
       consumed: stats.totalConsumed,
       redeemed: stats.totalRedeemed,
       deactivated: stats.totalDeactivated,
+      upgraded: stats.totalUpgraded,
+      downgraded: stats.totalDowngraded,
+      tierDistribution: stats.tierDistribution,
     });
   }
 
@@ -358,7 +364,7 @@ router.get("/stats", requireAdminAuth, async (_req, res) => {
     totalKeys,
     totalRedeemed,
     totalActive,
-    perPartner,
+    partnerSummaries,
   });
 });
 
