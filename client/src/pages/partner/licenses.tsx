@@ -47,7 +47,7 @@ export default function PartnerLicenses() {
   if (search) queryParams.set("search", search);
 
   const { data, isLoading } = useQuery<LicensesResponse>({
-    queryKey: ["/api/partner/licenses", `?${queryParams.toString()}`],
+    queryKey: [`/api/partner/licenses?${queryParams.toString()}`],
   });
 
   const columns: DataTableColumn<PartnerLicenseKey & Record<string, unknown>>[] = [

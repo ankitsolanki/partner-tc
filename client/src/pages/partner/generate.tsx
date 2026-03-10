@@ -44,10 +44,15 @@ const generateFormSchema = z.object({
 
 type GenerateFormValues = z.infer<typeof generateFormSchema>;
 
-interface GenerateResult {
+interface BatchInfo {
   batchId: string;
   tier: number;
   quantity: number;
+}
+
+interface GenerateResult {
+  batch: BatchInfo;
+  count: number;
 }
 
 export default function PartnerGenerate() {
@@ -71,8 +76,11 @@ export default function PartnerGenerate() {
     },
     onSuccess: (data: GenerateResult) => {
       setResult(data);
-      queryClient.invalidateQueries({ queryKey: ["/api/partner/licenses"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/partner/licenses/stats"] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string" &&
+          (query.queryKey[0] as string).startsWith("/api/partner/licenses"),
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/partner/batches"] });
       toast({ title: "Keys generated successfully" });
     },
@@ -91,7 +99,7 @@ export default function PartnerGenerate() {
 
   const handleExportBatch = () => {
     if (!result) return;
-    window.open(`/api/partner/batches/${result.batchId}/export`, "_blank");
+    window.open(`/api/partner/batches/${result.batch.batchId}/export`, "_blank");
   };
 
   if (result) {
@@ -106,10 +114,10 @@ export default function PartnerGenerate() {
               Keys Generated Successfully
             </h2>
             <p className="mt-1 text-sm text-muted-foreground" data-testid="text-success-summary">
-              {result.quantity} {TIER_LABELS[result.tier]} keys have been generated
+              {result.count} {TIER_LABELS[result.batch.tier]} keys have been generated
             </p>
             <p className="mt-1 text-xs font-mono text-muted-foreground" data-testid="text-batch-id">
-              Batch: {result.batchId}
+              Batch: {result.batch.batchId}
             </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
