@@ -251,17 +251,15 @@ router.get("/keycloak/callback", async (req, res) => {
     // Step 3 — Clear the pending license key from session (it's been claimed)
     delete req.session.pendingLicenseKey;
 
-    // Step 4 — Redirect to the Tiny Command app with the license key so the app can finalise linking
-    const loginUrl = process.env.KEYCLOAK_LOGIN_URL ?? "https://account.oute.app";
-    const finalParams = new URLSearchParams({
-      appsumo_license: pendingLicenseKey,
-      user_id: keycloakUserId,
-      ...(userEmail ? { email: userEmail } : {}),
+    // Step 4 — Redirect to the redemption success page on this platform
+    const baseUrl = process.env.APP_BASE_URL ?? "";
+    const successParams = new URLSearchParams({
       ...(userName ? { name: userName } : {}),
+      ...(userEmail ? { email: userEmail } : {}),
     });
 
-    console.log("[Keycloak OAuth] Flow complete — redirecting to app:", loginUrl);
-    return res.redirect(`${loginUrl}?${finalParams.toString()}`);
+    console.log("[Keycloak OAuth] Flow complete — redirecting to success page");
+    return res.redirect(`${baseUrl}/redeem/success?${successParams.toString()}`);
   } catch (err) {
     console.error("[Keycloak OAuth] Unexpected error:", err);
     return res.status(500).json({ message: "Keycloak processing failed unexpectedly" });

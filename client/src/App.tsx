@@ -16,6 +16,7 @@ import AdminPartners from "@/pages/admin/partners";
 import AdminPartnerDetail from "@/pages/admin/partner-detail";
 import AdminGenerate from "@/pages/admin/generate";
 import AdminAppSumoIntegration from "@/pages/admin/appsumo-integration";
+import RedeemSuccess from "@/pages/redeem-success";
 
 function Router() {
   return (
@@ -37,6 +38,8 @@ function Router() {
       <Route path="/admin/partners/:id" component={AdminPartnerDetail} />
       <Route path="/admin/generate" component={AdminGenerate} />
       <Route path="/admin/appsumo" component={AdminAppSumoIntegration} />
+
+      <Route path="/redeem/success" component={RedeemSuccess} />
 
       <Route component={NotFound} />
     </Switch>
