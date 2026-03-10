@@ -466,7 +466,7 @@ function DocsPanel() {
   );
 }
 
-function WebhookTester({ config }: { config: PartnerConfig }) {
+function WebhookTester({ config, baseUrl }: { config: PartnerConfig; baseUrl: string }) {
   const { toast } = useToast();
   const [eventType, setEventType] = useState("test");
   const [licenseKey, setLicenseKey] = useState("");
@@ -503,11 +503,11 @@ function WebhookTester({ config }: { config: PartnerConfig }) {
     }
     if (eventType === "deactivate") { body.license_key = licenseKey || "<key>"; }
 
-    return `curl -X POST http://localhost:5000/api/webhooks/partner \\
+    return `curl -X POST ${baseUrl}/api/webhooks/partner \\
   -H "Content-Type: application/json" \\
   -H "x-partner-name: appsumo" \\
   -d '${JSON.stringify(body, null, 2)}'`;
-  }, [eventType, licenseKey, prevLicenseKey, newLicenseKey, tier, newTier, userId]);
+  }, [eventType, licenseKey, prevLicenseKey, newLicenseKey, tier, newTier, userId, baseUrl]);
 
   const testMutation = useMutation({
     mutationFn: async () => {
@@ -740,8 +740,7 @@ function WebhookTester({ config }: { config: PartnerConfig }) {
   );
 }
 
-function OAuthSetup({ config }: { config: PartnerConfig }) {
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://your-domain.com";
+function OAuthSetup({ config, baseUrl }: { config: PartnerConfig; baseUrl: string }) {
   const webhookUrl = `${baseUrl}/api/webhooks/partner`;
   const oauthCallbackUrl = `${baseUrl}/api/auth/partner/callback?partner=appsumo`;
 
@@ -860,6 +859,10 @@ export default function AppSumoIntegration() {
     queryKey: ["/api/admin/test/partner-config"],
   });
 
+  const [baseUrl, setBaseUrl] = useState(
+    typeof window !== "undefined" ? window.location.origin : "https://your-domain.com"
+  );
+
   return (
     <AdminLayout>
       <div className="flex flex-col gap-4 h-full">
@@ -900,6 +903,24 @@ export default function AppSumoIntegration() {
               </div>
             ) : config ? (
               <ScrollArea className="h-full p-5">
+                <div className="mb-5 rounded-md border bg-muted/30 px-4 py-3 flex items-center gap-3">
+                  <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <Label className="text-xs font-medium block mb-1">
+                      Base URL
+                      <span className="ml-2 font-normal text-muted-foreground">— all webhook and OAuth URLs below update automatically</span>
+                    </Label>
+                    <Input
+                      value={baseUrl}
+                      onChange={(e) => setBaseUrl(e.target.value.replace(/\/$/, ""))}
+                      className="h-7 text-xs font-mono"
+                      placeholder="https://your-domain.com"
+                      data-testid="input-base-url"
+                    />
+                  </div>
+                  <CopyButton value={baseUrl} label="Copy" />
+                </div>
+
                 <Tabs defaultValue="webhook" className="w-full">
                   <TabsList className="mb-5 w-full" data-testid="tabs-test">
                     <TabsTrigger value="webhook" className="flex-1" data-testid="tab-webhook">
@@ -912,10 +933,10 @@ export default function AppSumoIntegration() {
                     </TabsTrigger>
                   </TabsList>
                   <TabsContent value="webhook">
-                    <WebhookTester config={config} />
+                    <WebhookTester config={config} baseUrl={baseUrl} />
                   </TabsContent>
                   <TabsContent value="oauth">
-                    <OAuthSetup config={config} />
+                    <OAuthSetup config={config} baseUrl={baseUrl} />
                   </TabsContent>
                 </Tabs>
                 <div className="h-8" />
