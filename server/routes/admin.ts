@@ -228,6 +228,97 @@ router.post("/licenses/generate", requireAdminAuth, async (req, res) => {
   return res.status(201).json({ batch, licenses, count: licenses.length });
 });
 
+router.get("/test/partner-config", requireAdminAuth, async (_req, res) => {
+  const partner = await storage.getPartner("appsumo");
+  if (!partner) {
+    return res.status(404).json({ message: "AppSumo partner not found" });
+  }
+  const stats = await storage.getPartnerStats(partner.id);
+  return res.json({
+    id: partner.id,
+    name: partner.name,
+    displayName: partner.displayName,
+    isActive: partner.isActive,
+    apiKey: partner.apiKey,
+    webhookSecret: partner.webhookSecret,
+    oauthClientId: partner.oauthClientId,
+    oauthClientSecret: partner.oauthClientSecret ? "configured" : null,
+    stats,
+  });
+});
+
+router.get("/test/licenses", requireAdminAuth, async (req, res) => {
+  const partnerId = req.query.partnerId ? parseInt(req.query.partnerId as string) : null;
+  if (!partnerId) {
+    return res.status(400).json({ message: "partnerId is required" });
+  }
+  const { licenses } = await storage.getLicensesByPartner(partnerId, { limit: 200, offset: 0 });
+  return res.json(licenses.map((l) => ({
+    licenseKey: l.licenseKey,
+    status: l.status,
+    tier: l.tier,
+  })));
+});
+
+router.post("/test/webhook", requireAdminAuth, async (req, res) => {
+  const { event, partnerName = "appsumo", license_key, prev_license_key, new_license_key, tier, new_tier, user_id } = req.body;
+
+  const partner = await storage.getPartner(partnerName);
+  if (!partner) {
+    return res.status(404).json({ message: `Partner "${partnerName}" not found` });
+  }
+
+  if (event === "test") {
+    return res.json({ event: "test", success: true });
+  }
+
+  try {
+    let license;
+    switch (event) {
+      case "purchase": {
+        if (!license_key || tier === undefined) {
+          return res.status(400).json({ message: "license_key and tier required for purchase" });
+        }
+        license = await storage.handlePurchaseEvent(partner.id, license_key, tier, req.body);
+        break;
+      }
+      case "activate": {
+        if (!license_key || !user_id) {
+          return res.status(400).json({ message: "license_key and user_id required for activate" });
+        }
+        license = await storage.handleActivateEvent(partner.id, license_key, user_id, req.body);
+        break;
+      }
+      case "upgrade": {
+        if (!prev_license_key || !new_license_key || new_tier === undefined) {
+          return res.status(400).json({ message: "prev_license_key, new_license_key, and new_tier required for upgrade" });
+        }
+        license = await storage.handleUpgradeEvent(partner.id, prev_license_key, new_license_key, new_tier, req.body);
+        break;
+      }
+      case "downgrade": {
+        if (!prev_license_key || !new_license_key || new_tier === undefined) {
+          return res.status(400).json({ message: "prev_license_key, new_license_key, and new_tier required for downgrade" });
+        }
+        license = await storage.handleDowngradeEvent(partner.id, prev_license_key, new_license_key, new_tier, req.body);
+        break;
+      }
+      case "deactivate": {
+        if (!license_key) {
+          return res.status(400).json({ message: "license_key required for deactivate" });
+        }
+        license = await storage.handleDeactivateEvent(partner.id, license_key, req.body);
+        break;
+      }
+      default:
+        return res.status(400).json({ message: `Unknown event: ${event}` });
+    }
+    return res.json({ event, success: true, license });
+  } catch (err: any) {
+    return res.status(500).json({ event, success: false, error: err.message });
+  }
+});
+
 router.get("/stats", requireAdminAuth, async (_req, res) => {
   const partnersList = await storage.getPartners();
 

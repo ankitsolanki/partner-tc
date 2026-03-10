@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { LayoutDashboard, Users, Plus, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Plus, LogOut, Plug } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -24,6 +24,7 @@ const navItems = [
   { title: "Dashboard", href: "/admin/dashboard", icon: LayoutDashboard },
   { title: "Partners", href: "/admin/partners", icon: Users },
   { title: "Generate Keys", href: "/admin/generate", icon: Plus },
+  { title: "AppSumo Integration", href: "/admin/appsumo", icon: Plug },
 ];
 
 interface AdminLayoutProps {

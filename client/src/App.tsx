@@ -15,6 +15,7 @@ import AdminDashboard from "@/pages/admin/dashboard";
 import AdminPartners from "@/pages/admin/partners";
 import AdminPartnerDetail from "@/pages/admin/partner-detail";
 import AdminGenerate from "@/pages/admin/generate";
+import AdminAppSumoIntegration from "@/pages/admin/appsumo-integration";
 
 function Router() {
   return (
@@ -35,6 +36,7 @@ function Router() {
       <Route path="/admin/partners" component={AdminPartners} />
       <Route path="/admin/partners/:id" component={AdminPartnerDetail} />
       <Route path="/admin/generate" component={AdminGenerate} />
+      <Route path="/admin/appsumo" component={AdminAppSumoIntegration} />
 
       <Route component={NotFound} />
     </Switch>
