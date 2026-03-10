@@ -112,16 +112,21 @@ router.post("/licenses/generate", requirePartnerAuth, async (req, res) => {
 
 router.get("/licenses", requirePartnerAuth, async (req, res) => {
   const partnerId = req.session.partnerId!;
+  const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+  const page = req.query.page ? parseInt(req.query.page as string) : 1;
+  const offset = (page - 1) * limit;
+
   const filters = {
     status: req.query.status as string | undefined,
     tier: req.query.tier ? parseInt(req.query.tier as string) : undefined,
     search: req.query.search as string | undefined,
-    limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
-    offset: req.query.offset ? parseInt(req.query.offset as string) : 0,
+    limit,
+    offset,
   };
 
-  const result = await storage.getLicensesByPartner(partnerId, filters);
-  return res.json(result);
+  const { licenses, total } = await storage.getLicensesByPartner(partnerId, filters);
+  const totalPages = Math.ceil(total / limit);
+  return res.json({ data: licenses, total, page, totalPages });
 });
 
 router.get("/licenses/stats", requirePartnerAuth, async (req, res) => {
