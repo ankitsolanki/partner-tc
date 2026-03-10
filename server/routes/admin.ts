@@ -283,10 +283,10 @@ router.post("/test/webhook", requireAdminAuth, async (req, res) => {
         break;
       }
       case "activate": {
-        if (!license_key || !user_id) {
-          return res.status(400).json({ message: "license_key and user_id required for activate" });
+        if (!license_key) {
+          return res.status(400).json({ message: "license_key required for activate" });
         }
-        license = await storage.handleActivateEvent(partner.id, license_key, user_id, req.body);
+        license = await storage.handleActivateEvent(partner.id, license_key, req.body);
         break;
       }
       case "upgrade": {

@@ -70,10 +70,10 @@ router.post("/partner", async (req, res) => {
     }
 
     case "activate": {
-      if (!payload.license_key || !payload.user_id) {
-        return res.status(400).json({ message: "license_key and user_id required for activate" });
+      if (!payload.license_key) {
+        return res.status(400).json({ message: "license_key required for activate" });
       }
-      await storage.handleActivateEvent(partner.id, payload.license_key, payload.user_id, webhookData);
+      await storage.handleActivateEvent(partner.id, payload.license_key, webhookData);
       return res.json({ event: "activate", success: true });
     }
 

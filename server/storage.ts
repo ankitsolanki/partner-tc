@@ -92,7 +92,7 @@ export interface IStorage {
   getConversionFunnel(partnerId: number): Promise<ConversionFunnel>;
 
   handlePurchaseEvent(partnerId: number, licenseKey: string, tier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
-  handleActivateEvent(partnerId: number, licenseKey: string, userId: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
+  handleActivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
   handleUpgradeEvent(partnerId: number, previousKey: string, newKey: string, newTier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
   handleDowngradeEvent(partnerId: number, previousKey: string, newKey: string, newTier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
   handleDeactivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey>;
@@ -456,13 +456,12 @@ export class DatabaseStorage implements IStorage {
     return newKey;
   }
 
-  async handleActivateEvent(partnerId: number, licenseKey: string, userId: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
+  async handleActivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
     const existing = await this.getLicenseByKey(licenseKey);
     const previousStatus = existing?.status ?? LICENSE_STATUS.CONSUMED;
 
     const updated = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.REDEEMED, {
       redeemedAt: new Date(),
-      userId,
     });
 
     await this.createLicenseEvent({
@@ -473,7 +472,6 @@ export class DatabaseStorage implements IStorage {
       newStatus: LICENSE_STATUS.REDEEMED,
       triggeredBy: "webhook",
       webhookPayload: payload,
-      userId,
       tier: existing?.tier,
     });
 
