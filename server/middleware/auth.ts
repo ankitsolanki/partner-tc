@@ -10,6 +10,7 @@ declare module "express-session" {
     partnerId?: number;
     isAdmin?: boolean;
     pendingLicenseKey?: string;
+    oauthState?: string;
   }
 }
 
