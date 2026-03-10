@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Users, Plus, LogOut } from "lucide-react";
 import {
@@ -34,6 +35,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isLoading } = useAdminAuth();
   const logoutMutation = useAdminLogout();
 
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/admin/login");
+    }
+  }, [isLoading, user, navigate]);
+
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
       onSuccess: () => navigate("/admin/login"),
@@ -49,7 +56,6 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   }
 
   if (!user) {
-    navigate("/admin/login");
     return null;
   }
 

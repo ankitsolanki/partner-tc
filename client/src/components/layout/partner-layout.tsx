@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { LayoutDashboard, Key, Plus, BarChart3, LogOut } from "lucide-react";
 import {
@@ -35,6 +36,12 @@ export function PartnerLayout({ children }: PartnerLayoutProps) {
   const { user, isLoading } = usePartnerAuth();
   const logoutMutation = usePartnerLogout();
 
+  useEffect(() => {
+    if (!isLoading && !user) {
+      navigate("/partner/login");
+    }
+  }, [isLoading, user, navigate]);
+
   const handleLogout = () => {
     logoutMutation.mutate(undefined, {
       onSuccess: () => navigate("/partner/login"),
@@ -50,7 +57,6 @@ export function PartnerLayout({ children }: PartnerLayoutProps) {
   }
 
   if (!user) {
-    navigate("/partner/login");
     return null;
   }
 

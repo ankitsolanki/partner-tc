@@ -63,7 +63,7 @@ export default function PartnerLogin() {
   }
 
   if (isAuthenticated) {
-    navigate("/partner/dashboard");
+    setTimeout(() => navigate("/partner/dashboard"), 0);
     return null;
   }
 

@@ -28,7 +28,7 @@ interface PartnerStats {
     total: number;
     available: number;
   }>;
-  recentEvents: Array<{
+  recentEvents?: Array<{
     id: number;
     licenseKey: string;
     eventType: string;
@@ -71,6 +71,9 @@ export default function PartnerDashboard() {
   const { data: stats, isLoading } = useQuery<PartnerStats>({
     queryKey: ["/api/partner/licenses/stats"],
   });
+
+  const recentEvents = stats?.recentEvents ?? [];
+  const tierDistribution = stats?.tierDistribution ?? [];
 
   return (
     <PartnerLayout>
@@ -134,10 +137,10 @@ export default function PartnerDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-4" data-testid="section-tier-distribution">
-                    {stats.tierDistribution.length === 0 ? (
+                    {tierDistribution.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No keys generated yet</p>
                     ) : (
-                      stats.tierDistribution.map((tier) => {
+                      tierDistribution.map((tier) => {
                         const pct = tier.total > 0 ? Math.round((tier.available / tier.total) * 100) : 0;
                         return (
                           <div key={tier.tier} className="flex flex-col gap-1" data-testid={`tier-dist-${tier.tier}`}>
@@ -164,10 +167,10 @@ export default function PartnerDashboard() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-3" data-testid="section-recent-activity">
-                    {stats.recentEvents.length === 0 ? (
+                    {recentEvents.length === 0 ? (
                       <p className="text-sm text-muted-foreground">No recent activity</p>
                     ) : (
-                      stats.recentEvents.map((event) => (
+                      recentEvents.map((event) => (
                         <div
                           key={event.id}
                           className="flex items-center justify-between gap-2 flex-wrap"

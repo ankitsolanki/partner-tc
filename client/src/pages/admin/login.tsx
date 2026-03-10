@@ -55,7 +55,7 @@ export default function AdminLogin() {
   }
 
   if (isAuthenticated) {
-    navigate("/admin/dashboard");
+    setTimeout(() => navigate("/admin/dashboard"), 0);
     return null;
   }
 

@@ -127,7 +127,8 @@ router.get("/licenses", requirePartnerAuth, async (req, res) => {
 router.get("/licenses/stats", requirePartnerAuth, async (req, res) => {
   const partnerId = req.session.partnerId!;
   const stats = await storage.getPartnerStats(partnerId);
-  return res.json(stats);
+  const recentEvents = await storage.getEventsByPartner(partnerId, 10);
+  return res.json({ ...stats, recentEvents });
 });
 
 router.get("/licenses/export", requirePartnerAuth, async (req, res) => {
