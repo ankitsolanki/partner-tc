@@ -1,0 +1,2157 @@
+Hey, I have just got registered on AppSumo, and I am attaching the documentation link. I am an AppSumo partner, and my product is getting listed on AppSumo. My product name is Tiny Command. I want to be able to set up the entire AppSumo integration journey. I am sending you the documentation links for it. Go through the documentation link and come back to me on what you understood out of this.
+
+https://docs.licensing.appsumo.com/webhook/webhook__connect.html#processing-the-webhook-request
+
+https://docs.licensing.appsumo.com/quick-start/quick-start__overview.html
+
+You should access the nested pages also so that you know relevant content can get extracted. Be very thorough with this entire research and come back to me on what you've understood. We don't need to implement right now; we first need to understand what is there.
+
+
+
+Perfect! I've thoroughly reviewed the AppSumo integration documentation. Let me provide you with a comprehensive understanding of what I've learned:
+
+What I Understood: AppSumo Integration Journey for Tiny Command
+📋 Overview
+AppSumo's licensing system allows your customers to purchase, activate, and manage licenses for Tiny Command through their platform. The integration consists of two main components: Webhooks and OAuth.
+
+🔧 Core Integration Components
+1. Webhook Integration
+Webhooks are how AppSumo notifies your system in real-time when license events occur.
+
+Key Webhook Events:
+
+purchase - When a customer buys Tiny Command on AppSumo
+activate - When a customer activates their license (this is when they actually want to start using your product)
+upgrade - When a customer upgrades their tier (e.g., Tier 1 → Tier 2)
+downgrade - When a customer downgrades their tier (e.g., Tier 2 → Tier 1)
+deactivate - When a license is cancelled/refunded
+migrate (add-on specific) - For deal add-ons during upgrade/downgrade events
+Webhook URL Requirements:
+
+Must accept POST requests
+Must return 200 OK status with JSON response: {"event": "activate", "success": true}
+Must validate 3 event types initially: activate, deactivate, and optionally purchase
+Must handle a test webhook with "test": true flag for validation
+Security (HMAC SHA256):
+
+Each webhook includes security headers:
+X-Appsumo-Signature - Encrypted signature using your API key
+X-Appsumo-Timestamp - Timestamp of the request
+You should validate requests by recreating the signature and comparing it to prevent man-in-the-middle attacks
+2. OAuth Integration
+OAuth handles the user authentication flow when customers activate their license and access Tiny Command for the first time.
+
+OAuth Redirect URL Requirements:
+
+Must handle GET requests
+Must return 200 OK for validation
+This is where customers land after authorizing access from AppSumo
+Should be your sign-up/onboarding page where users complete account creation
+OAuth Flow (4 Steps):
+
+Customer activates license on AppSumo and grants OAuth consent
+
+Customer is redirected to your OAuth Redirect URL with a code parameter:
+
+https://your-url.com/?code=1d512d96ba99465ba9942bdf282233ea
+Exchange code for access token by making a POST request to:
+
+POST https://appsumo.com/openid/token/
+With:
+
+client_id and client_secret (from Partner Portal)
+code (from redirect URL)
+redirect_uri (your OAuth URL)
+grant_type: "authorization_code"
+Response includes:
+
+access_token (expires in 1 hour)
+refresh_token (for getting new access tokens)
+Fetch license details using the access token:
+
+GET https://appsumo.com/openid/license_key/?access_token=YOUR_ACCESS_TOKEN
+Response includes:
+
+license_key (UUID)
+status (active/inactive)
+tier (pricing tier)
+🔑 Credentials & Setup
+From AppSumo Partner Portal:
+
+API Key - For webhook validation and API requests (rate limited to 20 requests/min)
+OAuth Keys - client_id and client_secret (available after URL validation)
+Configuration Steps:
+
+Add Webhook URL and OAuth Redirect URL in Partner Portal
+Validate both URLs (they'll send test requests)
+Once validated, OAuth keys are generated
+Use developer credits from AppSumo to test the full flow
+📊 Important Webhook Data Structure
+Standard Purchase Event Example:
+
+{
+  "license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "purchase",
+  "license_status": "inactive",
+  "event_timestamp": 1318781876406,
+  "created_at": 1318738512,
+  "tier": 1,
+  "test": false
+}
+Upgrade Event (generates NEW license_key):
+
+{
+  "license_key": "c86ad3d7-3942-4d11-8814-b0bd81971691",
+  "prev_license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "upgrade",
+  "tier": 2,
+  "license_status": "inactive"
+}
+Note: Upgrades/downgrades create a new license_key UUID
+Previous license gets a deactivate event simultaneously
+You must update your system to use the new license key
+Add-on Support:
+
+Add-ons are identified by parent_license_key field
+Links child add-on licenses to parent deal licenses
+Add-ons can be purchased separately or bundled with deals
+🔌 Partner API (Optional)
+You can query AppSumo's API for auditing/verification:
+
+Base URL: https://api.licensing.appsumo.com/v2/
+
+Available Endpoints:
+
+GET /licenses - Get all licenses
+GET /licenses/:license_key - Get specific license
+GET /licenses/events - Get all license events
+GET /licenses/:license_key/events - Get events for specific license
+GET /licenses/:license_key/webhook-responses - See webhook delivery history
+Authentication: Header X-AppSumo-Licensing-Key with your API key
+
+🎯 What You Need to Build
+For Tiny Command's AppSumo integration, you'll need:
+
+Webhook Endpoint (POST /appsumo/webhook)
+
+Validate HMAC signature
+Handle purchase, activate, upgrade, downgrade, deactivate events
+Create/update user accounts and license records
+Return success responses
+OAuth Redirect Endpoint (GET /appsumo/auth/callback)
+
+Extract code parameter
+Exchange code for access token
+Fetch license details
+Create user account or log them in
+Apply correct tier/features based on license
+Database Schema for:
+
+Storing license keys, tiers, statuses
+Linking licenses to user accounts
+Handling license history (upgrades/downgrades create new keys)
+License Management Logic:
+
+Feature gating based on tier
+Handling license status changes
+Managing add-ons (if applicable)
+⚠️ Critical Notes
+License Status Paradox: When you receive an activate event, the license_status is still "inactive" - it only becomes "active" on AppSumo's side AFTER you respond with 200 OK
+
+New UUIDs on Tier Changes: Every upgrade/downgrade generates a completely new license_key - you must migrate user data to the new key
+
+Single-Use Codes: OAuth authorization codes are single-use and expire after one use or failed attempt
+
+Token Expiration: Access tokens expire in 1 hour - use refresh tokens to get new ones
+
+Test Webhooks: Webhooks with "test": true should not trigger actual actions in your system
+
+Security is Optional but Recommended: While webhook signature validation is marked "optional," it's strongly recommended to prevent malicious requests
+
+This is a comprehensive integration requiring backend endpoints, database management, OAuth flow implementation, and webhook processing. The good news is AppSumo provides clear documentation and test environments with developer credits to validate everything before going live.
+
+Would you like me to help you plan the technical implementation of this integration for Tiny Command?
+
+
+
+
+
+So, look, I'm confused: what or where do we need to implement both, or is one optional and the other is like, how can I implement one of these and go ahead, or do I need to implement both?
+
+
+
+Great question! Let me clarify this - you need to implement BOTH for a complete AppSumo integration, but they serve different purposes and work together.
+
+Why You Need Both:
+🔗 Webhook (Required)
+Purpose: Handles the backend license management - this is the core integration
+
+What it does:
+
+Receives real-time notifications when licenses are purchased, activated, upgraded, downgraded, or deactivated
+Allows you to create/update user accounts and license records in your database
+Manages the entire license lifecycle
+When it triggers:
+
+Customer buys Tiny Command on AppSumo → purchase event
+Customer activates their license → activate event
+Customer upgrades/downgrades → upgrade/downgrade events
+Customer requests refund → deactivate event
+Without webhooks: You won't know when someone purchases or activates a license, so you can't provision accounts automatically.
+
+🔐 OAuth (Required)
+Purpose: Handles the user authentication and initial login flow
+
+What it does:
+
+Authenticates the customer after they activate their license on AppSumo
+Redirects them to your application with their license information
+Allows you to create their account and log them in for the first time
+When it triggers:
+
+Only when the customer clicks "Get access now" or similar button on AppSumo after activating their license
+They authorize your app to access their AppSumo license data
+They get redirected to your sign-up/login page
+Without OAuth: Customers can't actually access your product after purchasing - there's no way for them to sign up or log in.
+
+How They Work Together:
+Here's the typical customer journey:
+
+Customer purchases Tiny Command on AppSumo
+
+✅ Webhook receives purchase event
+You create a placeholder/inactive account in your database
+Customer clicks "Activate" on AppSumo
+
+✅ Webhook receives activate event
+You mark the license as ready to use
+✅ OAuth flow starts - customer is redirected to your app
+Customer completes sign-up (sets email/password)
+You link the license to their new account
+Customer is now logged in and can use Tiny Command
+Customer upgrades their tier later
+
+✅ Webhook receives upgrade event
+You update their account with new tier/features
+No OAuth needed - they're already a user
+Can You Skip One?
+If you skip Webhooks:
+❌ You won't receive license events automatically
+❌ You'd have to manually check AppSumo's API constantly (inefficient)
+❌ You won't know about refunds/deactivations
+❌ Not practical or recommended
+
+If you skip OAuth:
+❌ Customers can't actually access your product
+❌ No way for them to create accounts or log in
+❌ Integration is essentially broken
+
+Bottom Line:
+Both are required for AppSumo integration. Think of it this way:
+
+Webhooks = The backend data pipeline (license management)
+OAuth = The frontend user experience (account creation & login)
+They're complementary - webhooks handle the license lifecycle in the background, while OAuth handles the user-facing authentication flow.
+
+Would you like me to help you create a plan to implement both the webhook endpoint and OAuth flow for Tiny Command? I can set up the complete integration system for you.
+
+
+
+So look for the OAuth implementation. My application logs in the user with Google's OAuth, right? Does the app store have some separate OAuth? Can you just go to the document and be very certain about it? Also do your research around it and come back to me.
+
+Perfect! Now I have complete clarity. Let me give you the definitive answer:
+
+✅ DEFINITIVE ANSWER: AppSumo OAuth is SEPARATE from Google OAuth
+After thoroughly reviewing the documentation and real-world implementations, here's what I'm 100% certain about:
+
+🔑 Key Finding:
+AppSumo has its OWN OAuth system that is completely separate from Google OAuth. You will have TWO different OAuth flows in your application:
+
+Your existing Google OAuth - For regular users signing up/logging in
+AppSumo's OAuth - Specifically for AppSumo customers to activate their licenses
+📌 How AppSumo OAuth Actually Works
+AppSumo's OAuth Flow:
+When a customer purchases Tiny Command on AppSumo and clicks "Activate" or "Get Access":
+
+Customer is on AppSumo.com → Clicks "Activate License"
+AppSumo redirects to AppSumo's OAuth consent screen (not Google's!)
+Customer authorizes your app to access their AppSumo license data
+Customer is redirected to YOUR OAuth Redirect URL with a code parameter:
+https://tinycommand.com/auth/appsumo/callback?code=abc123xyz
+Your backend exchanges that code with AppSumo's server for an access token
+Your backend fetches the license_key, tier, and status from AppSumo
+You link that license to a user account (new or existing)
+🔍 Critical Details from Documentation:
+From the official docs:
+"After a user accepts the OAuth consent, they will be redirected to your specified URL with a code parameter"
+
+This OAuth consent screen is AppSumo's own OAuth, not Google's. It uses the OpenID Connect protocol (which is built on OAuth 2.0).
+
+AppSumo OAuth Endpoints:
+Authorization: https://appsumo.com/openid/authorize
+Token Exchange: https://appsumo.com/openid/token/
+License Fetch: https://appsumo.com/openid/license_key/
+These are AppSumo's servers, not Google's.
+
+🎯 How This Works WITH Your Google OAuth
+You have two separate authentication paths:
+
+Path 1: Regular Users (Google OAuth)
+User → Your Website → "Sign in with Google" 
+     → Google OAuth → User Logged In
+Path 2: AppSumo Customers (AppSumo OAuth)
+Customer → AppSumo.com → Buys Tiny Command → "Activate" 
+        → AppSumo OAuth → Your Callback URL 
+        → You get license_key → Link to account
+💡 Implementation Strategy
+Here's what you need to do:
+
+Option A: Auto-create account (Recommended)
+When AppSumo redirects to your callback:
+
+1. Receive code from AppSumo
+2. Exchange for access_token
+3. Fetch license_key and tier
+4. Check if license already exists in your DB
+   - YES → Log user in automatically
+   - NO → Show sign-up page with options:
+     * "Continue with Google" (your existing Google OAuth)
+     * "Sign up with Email/Password"
+5. After signup, link the AppSumo license to the account
+6. Grant features based on tier
+Option B: Require existing account
+Force AppSumo customers to have an existing account first:
+
+1. Receive code from AppSumo
+2. Fetch license_key
+3. Show login page: "Link your AppSumo purchase to your account"
+4. User logs in (via Google OAuth or email/password)
+5. Link license to their logged-in account
+🗂️ What You Need to Build
+New Endpoint for AppSumo OAuth:
+1. OAuth Redirect URL (configured in AppSumo Partner Portal)
+
+GET /auth/appsumo/callback
+This receives the code from AppSumo after customer authorizes.
+
+2. Backend Logic:
+
+Exchange code for access_token (call AppSumo's /openid/token/)
+Fetch license details (call AppSumo's /openid/license_key/)
+Store license in database
+Link to user account (new or existing)
+3. Database Updates:
+Add to your users table:
+
+- appsumo_license_key (VARCHAR)
+- appsumo_tier (INTEGER)
+- appsumo_status (VARCHAR) -- active, inactive, deactivated
+- subscription_source (VARCHAR) -- 'appsumo', 'stripe', 'google', etc.
+📋 AppSumo Partner Portal Setup
+You need to configure in the Partner Portal:
+
+OAuth Redirect URL: https://tinycommand.com/auth/appsumo/callback
+
+Must return 200 OK when AppSumo validates it with a GET request
+Webhook URL: https://tinycommand.com/webhooks/appsumo
+
+Must return 200 OK with JSON: {"event": "activate", "success": true}
+After validation, you get:
+
+client_id
+client_secret
+API Key
+⚠️ Important Clarifications
+Q: Does AppSumo use MY Google OAuth?
+A: NO. AppSumo has its own OAuth system. Your Google OAuth is separate and unchanged.
+
+Q: Do I need to connect AppSumo to my Google OAuth?
+A: NO. They are independent systems. You just need to handle AppSumo's OAuth callback and link the license to a user account.
+
+Q: Can AppSumo customers still use Google to sign up?
+A: YES! After AppSumo redirects them with a license, you can show them your sign-up page where they can click "Sign in with Google" (your existing flow), and then you link the AppSumo license to that Google-authenticated account.
+
+Q: What if they already have an account via Google OAuth?
+A: PERFECT! They log in with Google (your existing flow), and you link the new AppSumo license to their existing account.
+
+📊 Summary
+Feature	Google OAuth	AppSumo OAuth
+Purpose	User authentication	License activation
+Provider	Google	AppSumo
+Endpoints	accounts.google.com	appsumo.com/openid/*
+What you get	User email, profile	License key, tier, status
+When used	Regular sign-up/login	Only when activating AppSumo purchase
+Credentials needed	Google client_id/secret	AppSumo client_id/secret
+🎯 Bottom Line
+You keep your existing Google OAuth exactly as is. You're adding a second, separate OAuth flow specifically for AppSumo that only handles license activation. After AppSumo OAuth completes, customers can still sign up/login using your existing Google OAuth - you just link the AppSumo license to their account afterward.
+
+Does this clear up the confusion? Would you like me to help you plan the implementation now that you understand both systems are separate?
+
+
+
+Yeah, it does clear the confusion now. Can you just lay down the entire requirement for me, from webhook to everything else? We will go with option number eight; I think it's much clearer. Can you just do that for me?
+
+Perfect! I'll lay out the complete end-to-end requirements for your AppSumo integration with Option A (Auto-create account) approach.
+
+🎯 Complete AppSumo Integration Requirements for Tiny Command
+📋 Overview
+You need to build two main components:
+
+Webhook Endpoint - Receives license events from AppSumo
+OAuth Callback Endpoint - Handles customer activation and account linking
+🔧 Part 1: Webhook Integration
+Purpose
+Receive real-time notifications when licenses are purchased, activated, upgraded, downgraded, or deactivated.
+
+Endpoint Requirements
+URL: POST /webhooks/appsumo (or /api/appsumo/webhook)
+
+What it must do:
+
+✅ Accept POST requests
+✅ Validate HMAC signature (security)
+✅ Process webhook events
+✅ Return 200 OK with JSON response: {"event": "activate", "success": true}
+Webhook Events to Handle
+1. Purchase Event
+When: Customer buys Tiny Command on AppSumo (but hasn't activated yet)
+
+Payload Example:
+
+{
+  "license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "purchase",
+  "license_status": "inactive",
+  "event_timestamp": 1318781876406,
+  "created_at": 1318738512,
+  "tier": 1,
+  "test": false
+}
+What to do:
+
+Create a placeholder license record in your database
+Status: pending_activation
+DO NOT create user account yet (they haven't activated)
+2. Activate Event
+When: Customer clicks "Activate" on AppSumo
+
+Payload Example:
+
+{
+  "license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "activate",
+  "license_status": "inactive",
+  "event_timestamp": 1318781876406,
+  "created_at": 1318738512,
+  "tier": 1,
+  "test": false,
+  "extra": {
+    "reason": "Purchased by the customer"
+  }
+}
+What to do:
+
+Find license record by license_key
+Update status to active after you respond with 200 OK
+Note: License is still "inactive" in the payload - it becomes active on AppSumo's side AFTER you respond successfully
+3. Upgrade Event
+When: Customer upgrades tier (e.g., Tier 1 → Tier 2)
+
+Payload Example:
+
+{
+  "license_key": "c86ad3d7-3942-4d11-8814-b0bd81971691",
+  "prev_license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "upgrade",
+  "event_timestamp": 1671586387628,
+  "created_at": 1671586387624,
+  "license_status": "inactive",
+  "tier": 2,
+  "test": false,
+  "extra": {
+    "reason": "Upgraded by the customer"
+  }
+}
+CRITICAL: Upgrade creates a NEW license_key!
+
+What to do:
+
+Find user by prev_license_key
+Update user's license_key to the new one
+Update tier to the new tier (e.g., 2)
+Update features/limits based on new tier
+Keep the old license in history for auditing
+You'll also receive a simultaneous deactivate event for the old license:
+
+{
+  "license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "deactivate",
+  "license_status": "deactivated",
+  "tier": 1,
+  "extra": {
+    "reason": "Upgraded by the customer"
+  }
+}
+4. Downgrade Event
+When: Customer downgrades tier (e.g., Tier 2 → Tier 1)
+
+Payload Example:
+
+{
+  "license_key": "c8e57fa3-ea5b-4c39-a2bf-74f7f51d01b0",
+  "prev_license_key": "c86ad3d7-3942-4d11-8814-b0bd81971691",
+  "event": "downgrade",
+  "event_timestamp": 1671586699435,
+  "created_at": 1671586699431,
+  "license_status": "inactive",
+  "tier": 1,
+  "test": false,
+  "extra": {
+    "reason": "Downgraded by the customer"
+  }
+}
+What to do:
+
+Same as upgrade, but reduce features/limits to lower tier
+Update to new license_key
+Deactivate old license
+5. Deactivate Event
+When: Customer requests refund or cancels
+
+Payload Example:
+
+{
+  "license_key": "3794577c-3dbc-11ec-9bbc-0242ac130002",
+  "event": "deactivate",
+  "event_timestamp": 1671586388077,
+  "created_at": 1671586388072,
+  "license_status": "deactivated",
+  "tier": 1,
+  "test": false,
+  "extra": {
+    "reason": "Refund requested"
+  }
+}
+What to do:
+
+Find user by license_key
+Update status to deactivated
+Revoke access to paid features
+Optionally: Convert to free tier or suspend account
+Security: HMAC Signature Validation
+IMPORTANT: Verify that webhooks are actually from AppSumo.
+
+Headers AppSumo sends:
+
+X-Appsumo-Signature - HMAC SHA256 signature
+X-Appsumo-Timestamp - Unix timestamp
+How to validate:
+
+const crypto = require('crypto');
+function validateWebhook(body, timestamp, signature, apiKey) {
+  // Combine timestamp + body
+  const message = timestamp + JSON.stringify(body);
+  
+  // Generate signature using your API key
+  const calculatedSignature = crypto
+    .createHmac('sha256', apiKey)
+    .update(message)
+    .digest('hex');
+  
+  // Compare signatures
+  return signature === calculatedSignature;
+}
+If validation fails: Return 401 Unauthorized
+
+Test Webhooks
+AppSumo will send test webhooks with "test": true:
+
+{
+  "license_key": "00000000-aaaa-1111-bbbb-abcdef012345",
+  "event": "purchase",
+  "license_status": "inactive",
+  "event_timestamp": 1318781876406,
+  "created_at": 1318738512,
+  "test": true
+}
+What to do:
+
+Detect "test": true
+DO NOT process (don't create records)
+Just return success: {"event": "purchase", "success": true}
+Required Response Format
+Always return:
+
+{
+  "event": "activate",  // Echo back the event type
+  "success": true
+}
+Status code: 200 OK
+
+🔐 Part 2: OAuth Integration
+Purpose
+Handle customer activation flow when they click "Get Access" on AppSumo.
+
+Endpoint Requirements
+URL: GET /auth/appsumo/callback (or /api/appsumo/callback)
+
+OAuth Flow Step-by-Step
+Step 1: Customer Activates License
+Customer is on AppSumo → Clicks "Activate" or "Get Access"
+
+AppSumo redirects customer to:
+
+https://tinycommand.com/auth/appsumo/callback?code=1d512d96ba99465ba9942bdf282233ea
+Step 2: Extract Authorization Code
+Your callback endpoint receives:
+
+Query Parameter: code (single-use, expires after use)
+Example:
+
+app.get('/auth/appsumo/callback', async (req, res) => {
+  const { code } = req.query;
+  
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+  
+  // Continue to Step 3...
+});
+Step 3: Exchange Code for Access Token
+Make POST request to AppSumo:
+
+Endpoint: POST https://appsumo.com/openid/token/
+
+Request Body:
+
+{
+  "client_id": "YOUR_APPSUMO_CLIENT_ID",
+  "client_secret": "YOUR_APPSUMO_CLIENT_SECRET",
+  "code": "1d512d96ba99465ba9942bdf282233ea",
+  "redirect_uri": "https://tinycommand.com/auth/appsumo/callback",
+  "grant_type": "authorization_code"
+}
+Headers:
+
+Content-Type: application/json
+Response:
+
+{
+  "access_token": "82b35f3d810f4cf49dd7a52d4b22a594",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "refresh_token": "0bac2d80d75d46658b0b31d3778039bb",
+  "id_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6..."
+}
+Important:
+
+access_token expires in 1 hour
+refresh_token can be used to get new access tokens
+Store both tokens temporarily
+Step 4: Fetch License Details
+Make GET request to AppSumo:
+
+Endpoint: GET https://appsumo.com/openid/license_key/?access_token=YOUR_ACCESS_TOKEN
+
+Response:
+
+{
+  "license_key": "d8bfa201-d8c0-4bc8-a27c-b1c12efa4a5a",
+  "status": "active",
+  "scopes": ["read_license"]
+}
+Step 5: Check if License Already Linked
+Query your database:
+
+SELECT * FROM users WHERE appsumo_license_key = 'd8bfa201-d8c0-4bc8-a27c-b1c12efa4a5a'
+Case A: License already exists
+
+if (existingUser) {
+  // Auto-login the user
+  req.session.userId = existingUser.id;
+  return res.redirect('/dashboard');
+}
+Case B: New license (no existing user)
+
+// Store license data in session
+req.session.pendingAppSumoLicense = {
+  license_key: 'd8bfa201-d8c0-4bc8-a27c-b1c12efa4a5a',
+  tier: 1,  // Get from your DB based on license_key from webhook
+  access_token: '82b35f3d810f4cf49dd7a52d4b22a594',
+  refresh_token: '0bac2d80d75d46658b0b31d3778039bb'
+};
+// Redirect to onboarding
+res.redirect('/onboarding?source=appsumo');
+Step 6: Show Onboarding/Signup Page
+Page: /onboarding?source=appsumo
+
+Display options:
+
+"Continue with Google" (your existing Google OAuth)
+"Sign up with Email/Password"
+"Already have an account? Log in"
+Important: Let user know they have an AppSumo license waiting to be linked.
+
+Step 7: Link License After Signup/Login
+After user completes signup/login (via Google OAuth or email):
+
+// User is now authenticated
+const userId = req.session.userId;
+const licenseData = req.session.pendingAppSumoLicense;
+// Update user with AppSumo license
+await db.users.update({
+  appsumo_license_key: licenseData.license_key,
+  appsumo_tier: licenseData.tier,
+  subscription_source: 'appsumo',
+  license_status: 'active'
+}, {
+  where: { id: userId }
+});
+// Clear session
+delete req.session.pendingAppSumoLicense;
+// Redirect to dashboard
+res.redirect('/dashboard?welcome=true&source=appsumo');
+💾 Part 3: Database Schema
+Users Table Updates
+Add these columns:
+
+ALTER TABLE users ADD COLUMN appsumo_license_key VARCHAR(255) UNIQUE;
+ALTER TABLE users ADD COLUMN appsumo_tier INTEGER;
+ALTER TABLE users ADD COLUMN license_status VARCHAR(50);  -- active, inactive, deactivated
+ALTER TABLE users ADD COLUMN subscription_source VARCHAR(50);  -- 'appsumo', 'stripe', 'google', etc.
+ALTER TABLE users ADD COLUMN appsumo_access_token TEXT;
+ALTER TABLE users ADD COLUMN appsumo_refresh_token TEXT;
+License History Table (Optional but Recommended)
+Track all license changes:
+
+CREATE TABLE appsumo_license_history (
+  id SERIAL PRIMARY KEY,
+  license_key VARCHAR(255) NOT NULL,
+  prev_license_key VARCHAR(255),
+  user_id INTEGER REFERENCES users(id),
+  event_type VARCHAR(50),  -- purchase, activate, upgrade, downgrade, deactivate
+  tier INTEGER,
+  status VARCHAR(50),
+  event_timestamp BIGINT,
+  created_at TIMESTAMP DEFAULT NOW(),
+  payload JSONB  -- Store full webhook payload
+);
+🔑 Part 4: Configuration Requirements
+From AppSumo Partner Portal
+You need to get:
+
+OAuth Credentials:
+
+client_id
+client_secret
+API Key (for webhook signature validation)
+
+Configure in Partner Portal
+OAuth Redirect URL: https://tinycommand.com/auth/appsumo/callback
+
+Must return 200 OK when validated
+Webhook URL: https://tinycommand.com/webhooks/appsumo
+
+Must return 200 OK with JSON: {"event": "activate", "success": true}
+Test Events to Support Initially:
+
+activate
+deactivate
+purchase (optional)
+Environment Variables
+APPSUMO_CLIENT_ID=your-client-id-from-portal
+APPSUMO_CLIENT_SECRET=your-client-secret-from-portal
+APPSUMO_API_KEY=your-api-key-from-portal
+APPSUMO_REDIRECT_URL=https://tinycommand.com/auth/appsumo/callback
+APPSUMO_WEBHOOK_URL=https://tinycommand.com/webhooks/appsumo
+📊 Part 5: Feature Gating Based on Tier
+Tier Mapping
+Define what each tier gets:
+
+const APPSUMO_TIERS = {
+  1: {
+    name: 'Tier 1',
+    max_commands: 100,
+    max_storage_mb: 500,
+    features: ['basic_commands', 'cloud_sync']
+  },
+  2: {
+    name: 'Tier 2',
+    max_commands: 500,
+    max_storage_mb: 2000,
+    features: ['basic_commands', 'cloud_sync', 'advanced_commands', 'team_sharing']
+  },
+  3: {
+    name: 'Tier 3',
+    max_commands: -1,  // Unlimited
+    max_storage_mb: -1,  // Unlimited
+    features: ['basic_commands', 'cloud_sync', 'advanced_commands', 'team_sharing', 'priority_support', 'api_access']
+  }
+};
+Middleware for Feature Checking
+function requireFeature(featureName) {
+  return async (req, res, next) => {
+    const user = req.user;
+    const tierConfig = APPSUMO_TIERS[user.appsumo_tier];
+    
+    if (tierConfig && tierConfig.features.includes(featureName)) {
+      next();
+    } else {
+      res.status(403).json({
+        error: 'Upgrade required',
+        message: `This feature requires ${featureName}`
+      });
+    }
+  };
+}
+// Usage
+app.post('/api/advanced-command', requireFeature('advanced_commands'), async (req, res) => {
+  // Handler
+});
+🧪 Part 6: Testing Requirements
+1. Validate URLs in Partner Portal
+OAuth Redirect URL Test:
+
+AppSumo sends: GET https://tinycommand.com/auth/appsumo/callback
+You must return: 200 OK
+Webhook URL Test:
+
+AppSumo sends: POST /webhooks/appsumo with {"test": true, "event": "activate"}
+You must return: 200 OK with {"event": "activate", "success": true}
+2. Test with Developer Credits
+AppSumo will give you developer credits to test:
+
+Go to your Product Detail Page on AppSumo
+Click "Buy" using developer credits
+Activate the license
+Verify webhook receives purchase and activate events
+Verify OAuth redirect works
+Complete signup/login flow
+Test upgrade/downgrade
+Test refund/deactivation
+3. Monitor License History UI
+Check in Partner Portal → API Settings → License History to see:
+
+All license events
+Webhook delivery status
+Failed webhooks (for debugging)
+⚠️ Part 7: Edge Cases to Handle
+1. OAuth Code Reuse
+Codes are single-use
+If user refreshes callback URL, code will fail
+Show error: "Authorization expired. Please activate again from AppSumo."
+2. User Already Has Account
+Show option to log in instead of signing up
+After login, link AppSumo license to existing account
+3. Multiple License Keys
+User buys Tier 1, then separately buys Tier 2
+Handle by checking for existing licenses
+Apply highest tier or allow stacking (your business logic)
+4. Access Token Expiration
+Access tokens expire in 1 hour
+Use refresh token to get new access token:
+async function refreshAccessToken(refreshToken) {
+  const response = await fetch('https://appsumo.com/openid/token/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_id: process.env.APPSUMO_CLIENT_ID,
+      client_secret: process.env.APPSUMO_CLIENT_SECRET,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token'
+    })
+  });
+  
+  return response.json();
+}
+5. Webhook Retries
+If your webhook fails (500 error, timeout), AppSumo will retry
+Make webhook handler idempotent (can be called multiple times safely)
+📝 Part 8: Response Formats Summary
+Webhook Response
+{
+  "event": "activate",
+  "success": true
+}
+Status: 200 OK
+
+OAuth Validation Response
+Just 200 OK status, no body needed
+
+Error Responses
+{
+  "success": false,
+  "error": "Invalid signature"
+}
+Status: 401 Unauthorized or 400 Bad Request
+
+🎯 Implementation Checklist
+Backend Endpoints:
+ POST /webhooks/appsumo - Webhook handler
+ GET /auth/appsumo/callback - OAuth callback
+ POST /api/appsumo/link-license - Link license to account (internal)
+Database:
+ Add AppSumo columns to users table
+ Create license_history table
+ Add indexes on appsumo_license_key
+Configuration:
+ Get OAuth credentials from Partner Portal
+ Get API Key from Partner Portal
+ Configure redirect URL in Portal
+ Configure webhook URL in Portal
+ Set environment variables
+Security:
+ Implement HMAC signature validation
+ Validate OAuth redirect_uri matches
+ Handle test webhooks (don't process)
+ Rate limiting on endpoints
+User Flow:
+ Onboarding page for AppSumo users
+ Link existing account option
+ Google OAuth integration (keep existing)
+ Email/password signup (keep existing)
+ Dashboard welcome message for AppSumo users
+Testing:
+ Validate URLs in Partner Portal
+ Test with developer credits
+ Test all webhook events
+ Test OAuth flow end-to-end
+ Test edge cases
+📚 Documentation References
+AppSumo OAuth: https://docs.licensing.appsumo.com/licensing/licensing__connect.html
+Webhooks: https://docs.licensing.appsumo.com/webhook/webhook__connect.html
+Security: https://docs.licensing.appsumo.com/webhook/webhook__security.html
+Quick Start: https://docs.licensing.appsumo.com/quick-start/quick-start__overview.html
+That's the complete, comprehensive requirement! Would you like me to help you create a plan to implement this integration for Tiny Command?
+
+Create a detailed plan to do this and get this implemented overall. When you're building the front-end, I think there should be an option for me to create license keys and export a license key so that I can give that to my Appsumo team. I would want a login for my partner. We're calling the word Appsumo, but right now, instead of Appsumo, we basically use the word partner everywhere, because this is not only Appsumo; this could be very generic overall.
+
+Partners can essentially generate tokens and keys over there, and as redemption happens, they will basically see in the portal that this has been redeemed. One is basically consumed; the other is redeemed. The entire life cycle of the key needs to be mapped. Can you, before you build a plan, just run me through the life cycle of the key and the entire process that I'm talking about? I think I get that you understood the entire Appsumo journey. I want you to just quickly understand this too.
+
+
+
+Excellent! You're adding a Partner Management System on top of the AppSumo integration. Let me make sure I understand the complete lifecycle you're envisioning:
+
+🔄 Complete License Key Lifecycle (My Understanding)
+Let me walk through what I think you're describing:
+
+Phase 1: Partner (AppSumo) Generates Keys
+Your Partner Portal (admin interface for Tiny Command)
+
+Partner (AppSumo team) logs into your portal
+They generate license keys in bulk (e.g., 1000 keys for Tier 1)
+Each key has:
+Unique license key/code
+Tier (1, 2, 3)
+Status: generated (not yet distributed)
+Partner ID (AppSumo, or other partners)
+Export Keys
+
+Partner downloads CSV/JSON file with all generated keys
+They take these keys to their platform (AppSumo.com)
+AppSumo loads these into their system
+Phase 2: Customer Purchases (Key Consumed)
+Customer buys on AppSumo
+AppSumo assigns one of your pre-generated keys to the customer
+AppSumo sends webhook: purchase event with that license_key
+In your system:
+Find key by license_key
+Status changes: generated → consumed
+Timestamp: consumed_at
+Consumed = Purchased but not activated yet
+Phase 3: Customer Activates (Key Redeemed)
+Customer clicks "Activate" on AppSumo
+AppSumo sends webhook: activate event
+OAuth flow starts → Customer redirected to your app
+Customer completes signup/login
+License linked to user account
+In your system:
+Status changes: consumed → redeemed
+Timestamp: redeemed_at
+Linked to: user_id
+Redeemed = Activated and linked to actual user
+Phase 4: Ongoing Lifecycle Events
+Customer upgrades (Tier 1 → Tier 2)
+
+AppSumo sends webhook: upgrade with NEW license_key
+Old key status: redeemed → upgraded
+New key appears (either from your pool or AppSumo generates it)
+New key status: consumed → redeemed
+Customer downgrades (Tier 2 → Tier 1)
+
+Similar to upgrade
+Old key: redeemed → downgraded
+New key: consumed → redeemed
+Customer requests refund
+
+AppSumo sends webhook: deactivate
+Key status: redeemed → deactivated
+User loses access
+Key could potentially be recycled or marked as refunded
+Phase 5: Partner Monitoring
+Partner Portal Dashboard
+Partner (AppSumo) logs in and sees:
+Total generated: 1000 keys
+Consumed: 350 keys (purchased, not activated)
+Redeemed: 280 keys (activated and in use)
+Available: 650 keys (not yet sold)
+Deactivated: 15 keys (refunds)
+Upgraded/Downgraded: 8 keys (tier changes)
+Can view individual key details:
+License key
+Current status
+Timestamps (generated, consumed, redeemed)
+Linked user (email, maybe anonymized)
+Tier
+Partner name
+📊 License Key States (State Machine)
+generated → consumed → redeemed → [upgraded/downgraded/deactivated]
+    ↓          ↓           ↓
+ (created)  (purchased)  (activated & linked to user)
+All possible states:
+
+generated - Created by partner, not sold yet
+consumed - Sold/purchased, not activated
+redeemed - Activated and linked to user account
+upgraded - Was upgraded to higher tier (deprecated, new key issued)
+downgraded - Was downgraded to lower tier (deprecated, new key issued)
+deactivated - Refunded or cancelled
+expired - (Optional) If you want time-limited keys
+🎯 Key Questions to Clarify:
+1. Key Generation Strategy
+Question: When partner generates keys, do you:
+
+Option A: Pre-generate actual UUID keys upfront (like 3794577c-3dbc-11ec-9bbc-0242ac130002)
+Option B: Generate simple codes (like APPSUMO-TIER1-ABC123) that map to your internal system
+My assumption: Option A - you generate actual UUIDs that AppSumo uses in their webhooks
+
+2. Who Generates Upgrade/Downgrade Keys?
+Question: When customer upgrades Tier 1 → Tier 2:
+
+Option A: AppSumo uses a NEW key from your pre-generated Tier 2 pool
+Option B: AppSumo generates the new key on their side and sends it to you
+My assumption: Option A - they consume from your Tier 2 pool
+
+3. Partner Portal Access
+Question: Who can access the partner portal?
+
+Option A: Only YOU (Tiny Command admin) can generate keys and give to partners
+Option B: Partners (AppSumo team) can log in directly and generate their own keys
+Option C: Both - you can generate for any partner, partners can generate for themselves
+My assumption: Option B or C - Partners have login access
+
+4. Generic Partners vs AppSumo-Specific
+Question: You mentioned "partners" plural - are you planning:
+
+Option A: Multiple different partners (AppSumo, ProductHunt, StackSocial, etc.)
+Option B: Just AppSumo for now, but design it to be generic for future partners
+My assumption: Option B - design generically, AppSumo first
+
+5. Key Pool Management
+Question: If a partner runs out of keys:
+
+Option A: They log into portal and generate more themselves
+Option B: They contact you to generate more
+Option C: Auto-generate when pool gets low (with notification)
+My assumption: Option A - self-service
+
+6. Webhook Source Validation
+Question: When webhook comes in with a license_key:
+
+Option A: You know which partner it's from based on the key itself (each partner has unique prefix/range)
+Option B: AppSumo sends partner identifier in webhook
+Option C: You only work with one partner (AppSumo) so doesn't matter
+My assumption: Need clarification - how do you identify which partner sent the webhook?
+
+7. Partner Portal Features
+What partners can see/do:
+
+✅ Generate license keys (bulk)
+✅ Export keys (CSV/JSON)
+✅ View key statistics (generated, consumed, redeemed, etc.)
+✅ View individual key status
+❓ View linked user details (email)? Or privacy concerns?
+❓ Revoke/deactivate keys manually?
+❓ Generate reports (monthly sales, etc.)?
+8. Your Admin vs Partner Access
+Two different portals?
+
+Admin Portal (you):
+Manage all partners
+View all keys across all partners
+System configuration
+Partner Portal (AppSumo team):
+Only see their own keys
+Generate keys for their tiers
+View their statistics only
+My assumption: Yes, two different access levels
+
+🔍 Data Flow Example
+Let me illustrate with a concrete example:
+
+January 1, 2026: AppSumo Prepares for Campaign
+AppSumo partner manager logs into Tiny Command Partner Portal
+Generates 500 Tier 1 keys, 300 Tier 2 keys, 100 Tier 3 keys
+Downloads tiny-command-appsumo-keys-jan2026.csv:
+license_key,tier,status,generated_at,partner
+a1b2c3d4-...,1,generated,2026-01-01T10:00:00Z,appsumo
+e5f6g7h8-...,1,generated,2026-01-01T10:00:00Z,appsumo
+...
+AppSumo uploads these to their system
+January 15: First Customer Purchase
+Customer "john@example.com" buys Tier 1 on AppSumo
+AppSumo assigns license_key: a1b2c3d4-... from their pool
+Webhook arrives at your system:
+{
+  "license_key": "a1b2c3d4-...",
+  "event": "purchase",
+  "tier": 1
+}
+Your system updates:
+UPDATE partner_licenses 
+SET status = 'consumed', 
+    consumed_at = NOW()
+WHERE license_key = 'a1b2c3d4-...'
+January 15: Customer Activates (30 min later)
+Customer clicks "Activate" on AppSumo
+Webhook arrives:
+{
+  "license_key": "a1b2c3d4-...",
+  "event": "activate",
+  "tier": 1
+}
+OAuth flow starts → Customer redirected to your app
+Customer signs up as "john@example.com"
+Your system updates:
+UPDATE partner_licenses 
+SET status = 'redeemed',
+    redeemed_at = NOW(),
+    user_id = 12345
+WHERE license_key = 'a1b2c3d4-...'
+February 1: Customer Upgrades
+Customer upgrades Tier 1 → Tier 2
+AppSumo assigns NEW key from Tier 2 pool: license_key: e5f6g7h8-...
+Webhook arrives:
+{
+  "license_key": "e5f6g7h8-...",
+  "prev_license_key": "a1b2c3d4-...",
+  "event": "upgrade",
+  "tier": 2
+}
+Your system updates:
+-- Old key
+UPDATE partner_licenses 
+SET status = 'upgraded',
+    upgraded_at = NOW()
+WHERE license_key = 'a1b2c3d4-...'
+-- New key
+UPDATE partner_licenses 
+SET status = 'redeemed',
+    consumed_at = NOW(),
+    redeemed_at = NOW(),
+    user_id = 12345
+WHERE license_key = 'e5f6g7h8-...'
+February 15: AppSumo Checks Dashboard
+AppSumo partner logs into portal and sees:
+Campaign: January 2026
+========================
+Total Generated: 900 keys
+Status Breakdown:
+- Available:     850 keys (94%)
+- Consumed:      20 keys (2%) [purchased, not activated]
+- Redeemed:      25 keys (3%) [active users]
+- Upgraded:      3 keys
+- Deactivated:   2 keys [refunds]
+By Tier:
+- Tier 1: 480 available, 15 redeemed, 5 consumed
+- Tier 2: 280 available, 8 redeemed, 12 consumed
+- Tier 3: 90 available, 2 redeemed, 8 consumed
+❓ My Questions Before Building the Plan:
+Key Generation: UUIDs or custom format?
+Upgrade Keys: From your pool or AppSumo generates?
+Partner Access: Self-service generation or you generate for them?
+Multi-Partner: Just AppSumo or designing for multiple partners?
+Partner Identification: How do you know which partner sent webhook?
+User Privacy: Can partners see user emails/details?
+Key Management: Can partners revoke/edit keys after generation?
+Admin vs Partner Portal: Two separate interfaces or role-based single interface?
+Once you clarify these, I'll create a comprehensive plan that includes:
+
+Partner Portal UI/UX
+License key generation system
+Key lifecycle management
+Database schema for partner system
+AppSumo webhook integration (with partner context)
+Export functionality
+Reporting/analytics dashboard
+Does this match your vision? What would you like to clarify or adjust?
+
+Key generation strategy: you write option A is fine. Who upgrades? Generates upgrade out of game? Option A is fine. Partner portal. Option C for Partner Portal Access
+
+Option B for question number four, which is generic partners versus Appsumo specific
+
+Partner runs out of each option A
+
+For webhook source validation, I know, based on the key, which partner this is, so yeah.
+
+Do not show linked users. Revoke the activate key; cannot happen manually. Generate reports can happen if we should show reports, but otherwise, if we don't have it, that's also fine.
+
+Perfect! Now I have complete clarity. Let me summarize what we're building:
+
+✅ Confirmed Requirements Summary
+Architecture:
+Pre-generate UUID license keys upfront
+Partners consume from tier-specific pools for upgrades/downgrades
+Self-service partner portal (partners generate their own keys)
+Admin can also generate keys for any partner
+Generic partner system (not AppSumo-specific, but AppSumo is first partner)
+Partner identified by key prefix/range in database
+No user details shown to partners (privacy)
+No manual revocation by partners
+Reports optional (we'll include basic ones)
+🎯 COMPLETE IMPLEMENTATION PLAN
+System Architecture Overview
+┌─────────────────────────────────────────────────────────────┐
+│                    TINY COMMAND SYSTEM                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────┐         ┌──────────────────┐         │
+│  │  Admin Portal    │         │  Partner Portal  │         │
+│  │  (You)           │         │  (AppSumo team)  │         │
+│  │                  │         │                  │         │
+│  │ - Manage Partners│         │ - Generate Keys  │         │
+│  │ - Generate Keys  │         │ - Export Keys    │         │
+│  │ - View All Data  │         │ - View Stats     │         │
+│  │ - System Config  │         │ - View Reports   │         │
+│  └──────────────────┘         └──────────────────┘         │
+│           │                            │                    │
+│           └────────────┬───────────────┘                    │
+│                        ▼                                    │
+│         ┌──────────────────────────────┐                   │
+│         │   License Management API     │                   │
+│         └──────────────────────────────┘                   │
+│                        │                                    │
+│         ┌──────────────┴───────────────┐                   │
+│         ▼                              ▼                    │
+│  ┌─────────────┐              ┌──────────────┐            │
+│  │  Webhook    │◄─────────────│  OAuth       │            │
+│  │  Handler    │              │  Callback    │            │
+│  └─────────────┘              └──────────────┘            │
+│         ▲                              ▲                    │
+└─────────┼──────────────────────────────┼───────────────────┘
+          │                              │
+          │      ┌──────────────┐        │
+          └──────│   AppSumo    │────────┘
+                 │   Platform   │
+                 └──────────────┘
+📊 Part 1: Database Schema
+1.1 Partners Table
+CREATE TABLE partners (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,  -- 'appsumo', 'producthunt', etc.
+  display_name VARCHAR(255),  -- 'AppSumo', 'Product Hunt'
+  contact_email VARCHAR(255),
+  api_key VARCHAR(255) UNIQUE,  -- For webhook validation
+  oauth_client_id VARCHAR(255),
+  oauth_client_secret VARCHAR(255),
+  oauth_redirect_url TEXT,
+  webhook_url TEXT,
+  webhook_secret VARCHAR(255),  -- HMAC secret
+  is_active BOOLEAN DEFAULT true,
+  key_prefix VARCHAR(10),  -- 'AS' for AppSumo, 'PH' for ProductHunt
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+-- Example data
+INSERT INTO partners (name, display_name, key_prefix) 
+VALUES ('appsumo', 'AppSumo', 'AS');
+1.2 Partner Users Table (for partner portal access)
+CREATE TABLE partner_users (
+  id SERIAL PRIMARY KEY,
+  partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+  email VARCHAR(255) NOT NULL UNIQUE,
+  password_hash VARCHAR(255),  -- bcrypt hash
+  name VARCHAR(255),
+  role VARCHAR(50) DEFAULT 'viewer',  -- 'admin', 'manager', 'viewer'
+  is_active BOOLEAN DEFAULT true,
+  last_login_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_partner_users_partner_id ON partner_users(partner_id);
+CREATE INDEX idx_partner_users_email ON partner_users(email);
+1.3 License Keys Table
+CREATE TABLE partner_license_keys (
+  id SERIAL PRIMARY KEY,
+  license_key UUID NOT NULL UNIQUE,  -- The actual license key
+  partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+  tier INTEGER NOT NULL,  -- 1, 2, 3
+  
+  -- Status tracking
+  status VARCHAR(50) DEFAULT 'generated',  
+  -- States: generated, consumed, redeemed, upgraded, downgraded, deactivated
+  
+  -- Timestamps for lifecycle
+  generated_at TIMESTAMP DEFAULT NOW(),
+  consumed_at TIMESTAMP,  -- When purchased
+  redeemed_at TIMESTAMP,  -- When activated and linked
+  upgraded_at TIMESTAMP,
+  downgraded_at TIMESTAMP,
+  deactivated_at TIMESTAMP,
+  
+  -- Relationships
+  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,  -- Linked user (if redeemed)
+  upgraded_to_key UUID REFERENCES partner_license_keys(license_key),  -- New key after upgrade
+  downgraded_to_key UUID REFERENCES partner_license_keys(license_key),
+  previous_key UUID REFERENCES partner_license_keys(license_key),  -- For upgrade/downgrade chain
+  
+  -- Metadata
+  generation_batch_id VARCHAR(100),  -- Group keys by generation batch
+  notes TEXT,
+  
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_license_keys_partner_id ON partner_license_keys(partner_id);
+CREATE INDEX idx_license_keys_status ON partner_license_keys(status);
+CREATE INDEX idx_license_keys_tier ON partner_license_keys(tier);
+CREATE INDEX idx_license_keys_user_id ON partner_license_keys(user_id);
+CREATE INDEX idx_license_keys_license_key ON partner_license_keys(license_key);
+1.4 License Events Table (Audit log)
+CREATE TABLE partner_license_events (
+  id SERIAL PRIMARY KEY,
+  license_key UUID REFERENCES partner_license_keys(license_key) ON DELETE CASCADE,
+  partner_id INTEGER REFERENCES partners(id),
+  
+  event_type VARCHAR(50) NOT NULL,  
+  -- 'generated', 'exported', 'consumed', 'redeemed', 'upgraded', 'downgraded', 'deactivated'
+  
+  previous_status VARCHAR(50),
+  new_status VARCHAR(50),
+  
+  -- Event metadata
+  triggered_by VARCHAR(50),  -- 'webhook', 'manual', 'system'
+  webhook_payload JSONB,  -- Store full webhook data
+  
+  -- Additional data
+  user_id INTEGER REFERENCES users(id),
+  tier INTEGER,
+  previous_tier INTEGER,
+  
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_license_events_license_key ON partner_license_events(license_key);
+CREATE INDEX idx_license_events_event_type ON partner_license_events(event_type);
+CREATE INDEX idx_license_events_created_at ON partner_license_events(created_at);
+1.5 Key Generation Batches Table
+CREATE TABLE key_generation_batches (
+  id SERIAL PRIMARY KEY,
+  batch_id VARCHAR(100) NOT NULL UNIQUE,
+  partner_id INTEGER REFERENCES partners(id),
+  
+  tier INTEGER NOT NULL,
+  quantity INTEGER NOT NULL,
+  
+  generated_by_user_id INTEGER,  -- Admin or partner user who generated
+  generated_by_type VARCHAR(50),  -- 'admin' or 'partner'
+  
+  exported BOOLEAN DEFAULT false,
+  exported_at TIMESTAMP,
+  exported_by_user_id INTEGER,
+  
+  notes TEXT,
+  
+  created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX idx_batches_partner_id ON key_generation_batches(partner_id);
+CREATE INDEX idx_batches_batch_id ON key_generation_batches(batch_id);
+1.6 Updates to Existing Users Table
+ALTER TABLE users ADD COLUMN partner_license_key UUID REFERENCES partner_license_keys(license_key);
+ALTER TABLE users ADD COLUMN partner_id INTEGER REFERENCES partners(id);
+ALTER TABLE users ADD COLUMN partner_tier INTEGER;
+ALTER TABLE users ADD COLUMN license_status VARCHAR(50) DEFAULT 'inactive';
+ALTER TABLE users ADD COLUMN subscription_source VARCHAR(50);  -- 'partner', 'stripe', 'direct', etc.
+CREATE INDEX idx_users_partner_license_key ON users(partner_license_key);
+CREATE INDEX idx_users_partner_id ON users(partner_id);
+📦 Part 2: Backend API Endpoints
+2.1 Admin Endpoints (Protected - Admin only)
+POST   /api/admin/partners                    # Create new partner
+GET    /api/admin/partners                    # List all partners
+GET    /api/admin/partners/:id                # Get partner details
+PUT    /api/admin/partners/:id                # Update partner
+DELETE /api/admin/partners/:id                # Deactivate partner
+POST   /api/admin/partners/:id/users          # Create partner user
+GET    /api/admin/partners/:id/users          # List partner users
+PUT    /api/admin/partners/:id/users/:userId  # Update partner user
+DELETE /api/admin/partners/:id/users/:userId  # Deactivate partner user
+POST   /api/admin/licenses/generate            # Generate keys for any partner
+GET    /api/admin/licenses                     # View all licenses
+GET    /api/admin/licenses/:licenseKey         # View specific license
+GET    /api/admin/licenses/stats               # System-wide statistics
+GET    /api/admin/reports/overview             # Overall system reports
+GET    /api/admin/reports/partner/:partnerId   # Partner-specific reports
+2.2 Partner Portal Endpoints (Protected - Partner users only)
+# Authentication
+POST   /api/partner/auth/login                # Partner user login
+POST   /api/partner/auth/logout               # Partner user logout
+GET    /api/partner/auth/me                   # Get current partner user
+# License Management
+POST   /api/partner/licenses/generate         # Generate keys for own partner
+GET    /api/partner/licenses                  # List own licenses
+GET    /api/partner/licenses/stats            # Own license statistics
+GET    /api/partner/licenses/export           # Export keys (CSV/JSON)
+GET    /api/partner/licenses/:licenseKey      # Get specific license details
+# Batches
+GET    /api/partner/batches                   # List generation batches
+GET    /api/partner/batches/:batchId          # Get batch details
+GET    /api/partner/batches/:batchId/export   # Export specific batch
+# Reports
+GET    /api/partner/reports/overview          # Dashboard stats
+GET    /api/partner/reports/daily             # Daily breakdown
+GET    /api/partner/reports/monthly           # Monthly breakdown
+GET    /api/partner/reports/tier-distribution # Distribution by tier
+2.3 Webhook & OAuth Endpoints (Public - from AppSumo)
+POST   /api/webhooks/partner                  # Generic partner webhook
+GET    /api/auth/partner/callback             # Generic partner OAuth callback
+🎨 Part 3: Frontend - Partner Portal
+3.1 Partner Portal Pages
+Dashboard (/partner/dashboard)
+┌─────────────────────────────────────────────────────────┐
+│  Partner Portal - AppSumo                    [Logout]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Overview                                               │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │  Generated   │  │  Consumed    │  │  Redeemed    │ │
+│  │    1,000     │  │     350      │  │     280      │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │  Available   │  │  Deactivated │  │  Upgraded    │ │
+│  │     650      │  │      15      │  │      8       │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                         │
+│  By Tier                                                │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ Tier 1:  [████████░░] 480 available / 500 total │  │
+│  │ Tier 2:  [███████░░░] 350 available / 500 total │  │
+│  │ Tier 3:  [█████░░░░░] 250 available / 500 total │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  Recent Activity                                        │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ • 2 keys redeemed today                          │  │
+│  │ • 5 keys consumed yesterday                      │  │
+│  │ • 1 upgrade (Tier 1 → Tier 2) this week         │  │
+│  └─────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+Generate Keys (/partner/generate)
+┌─────────────────────────────────────────────────────────┐
+│  Generate License Keys                                   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Select Tier:                                           │
+│  ○ Tier 1    ○ Tier 2    ○ Tier 3                      │
+│                                                         │
+│  Quantity:                                              │
+│  [________] (Max: 10,000)                               │
+│                                                         │
+│  Batch Name (optional):                                 │
+│  [_______________________________________]              │
+│                                                         │
+│  Notes (optional):                                      │
+│  [_______________________________________]              │
+│  [_______________________________________]              │
+│                                                         │
+│  [Generate Keys]  [Cancel]                              │
+│                                                         │
+│  ⚠️  Note: Keys cannot be deleted once generated.       │
+│     Make sure to export and save them securely.         │
+└─────────────────────────────────────────────────────────┘
+License Keys List (/partner/licenses)
+┌─────────────────────────────────────────────────────────┐
+│  License Keys                              [Generate]   │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Filters:  [All Status ▼] [All Tiers ▼] [Search...]    │
+│                                                         │
+│  [Export Current View]  [Export All]                    │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ License Key        │Tier│Status    │Updated      │  │
+│  ├─────────────────────────────────────────────────┤  │
+│  │ a1b2c3d4-...       │ 1  │Redeemed  │2h ago      │  │
+│  │ e5f6g7h8-...       │ 2  │Consumed  │1d ago      │  │
+│  │ i9j0k1l2-...       │ 1  │Generated │3d ago      │  │
+│  │ m3n4o5p6-...       │ 3  │Upgraded  │5d ago      │  │
+│  │ ...                                              │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  Showing 1-50 of 1,000  [<] [1] [2] [3] ... [20] [>]   │
+└─────────────────────────────────────────────────────────┘
+License Key Details (/partner/licenses/:key)
+┌─────────────────────────────────────────────────────────┐
+│  License Key Details                         [Back]     │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  License Key:  a1b2c3d4-1234-5678-9abc-def012345678    │
+│  Tier:         2                                        │
+│  Status:       Redeemed                                 │
+│                                                         │
+│  Timeline                                               │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │ ✓ Generated    Jan 1, 2026 10:00 AM             │  │
+│  │   Batch: winter-campaign-2026                    │  │
+│  │                                                  │  │
+│  │ ✓ Consumed     Jan 15, 2026 2:30 PM             │  │
+│  │   (Purchased on partner platform)                │  │
+│  │                                                  │  │
+│  │ ✓ Redeemed     Jan 15, 2026 3:00 PM             │  │
+│  │   (User activated and linked account)            │  │
+│  │                                                  │  │
+│  │ ✓ Upgraded     Feb 1, 2026 11:15 AM             │  │
+│  │   New key: e5f6g7h8-...                          │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  Metadata                                               │
+│  • User ID:        #12345 (anonymized)                  │
+│  • Partner:        AppSumo                              │
+│  • Previous Key:   None                                 │
+│  • Upgraded To:    e5f6g7h8-...                         │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+Reports (/partner/reports)
+┌─────────────────────────────────────────────────────────┐
+│  Reports & Analytics                                     │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  Date Range: [Last 30 Days ▼]  [Custom Range...]       │
+│                                                         │
+│  Key Metrics                                            │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │                                                  │  │
+│  │  Conversion Funnel:                              │  │
+│  │  Generated → Consumed → Redeemed                 │  │
+│  │    1000    →   350    →    280                   │  │
+│  │   (100%)      (35%)       (80% of consumed)      │  │
+│  │                                                  │  │
+│  │  [████████████████░░░░░░░░░░░░░░]               │  │
+│  │                                                  │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  Daily Activity (Last 30 Days)                          │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │     │                                            │  │
+│  │  50 │     █                                      │  │
+│  │  40 │   █ █     █                                │  │
+│  │  30 │ █ █ █ █   █   █                            │  │
+│  │  20 │ █ █ █ █ █ █ █ █                            │  │
+│  │  10 │ █ █ █ █ █ █ █ █ █                          │  │
+│  │   0 └─────────────────────────                   │  │
+│  │      1  5  10 15 20 25 30                         │  │
+│  │      ■ Consumed  ■ Redeemed                       │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  Tier Distribution                                      │
+│  ┌─────────────────────────────────────────────────┐  │
+│  │  Tier 1: 65% (650 keys)                          │  │
+│  │  Tier 2: 25% (250 keys)                          │  │
+│  │  Tier 3: 10% (100 keys)                          │  │
+│  └─────────────────────────────────────────────────┘  │
+│                                                         │
+│  [Download PDF Report]  [Download CSV Data]             │
+└─────────────────────────────────────────────────────────┘
+⚙️ Part 4: Core Functionality Implementation
+4.1 License Key Generation Logic
+// Backend: /api/partner/licenses/generate
+async function generateLicenseKeys(partnerId, tier, quantity, batchName, generatedBy) {
+  // 1. Create batch record
+  const batchId = `${partner.key_prefix}-${tier}-${Date.now()}`;
+  const batch = await db.key_generation_batches.create({
+    batch_id: batchId,
+    partner_id: partnerId,
+    tier: tier,
+    quantity: quantity,
+    generated_by_user_id: generatedBy.userId,
+    generated_by_type: generatedBy.type,  // 'admin' or 'partner'
+    notes: batchName
+  });
+  // 2. Generate UUID keys
+  const keys = [];
+  for (let i = 0; i < quantity; i++) {
+    const licenseKey = uuidv4();  // e.g., a1b2c3d4-1234-5678-9abc-def012345678
+    
+    keys.push({
+      license_key: licenseKey,
+      partner_id: partnerId,
+      tier: tier,
+      status: 'generated',
+      generation_batch_id: batchId,
+      generated_at: new Date()
+    });
+  }
+  // 3. Bulk insert into database
+  await db.partner_license_keys.bulkCreate(keys);
+  // 4. Log events
+  for (const key of keys) {
+    await db.partner_license_events.create({
+      license_key: key.license_key,
+      partner_id: partnerId,
+      event_type: 'generated',
+      new_status: 'generated',
+      triggered_by: 'manual',
+      tier: tier
+    });
+  }
+  return {
+    batchId,
+    keysGenerated: quantity,
+    keys: keys.map(k => k.license_key)
+  };
+}
+4.2 Export Keys Logic
+// Backend: /api/partner/licenses/export
+async function exportLicenseKeys(partnerId, filters) {
+  // Build query based on filters
+  const query = {
+    partner_id: partnerId,
+    ...filters  // status, tier, batchId, dateRange, etc.
+  };
+  const keys = await db.partner_license_keys.findAll({
+    where: query,
+    order: [['generated_at', 'DESC']]
+  });
+  // Format as CSV
+  const csv = [
+    ['License Key', 'Tier', 'Status', 'Generated At', 'Consumed At', 'Redeemed At', 'Batch ID'].join(','),
+    ...keys.map(k => [
+      k.license_key,
+      k.tier,
+      k.status,
+      k.generated_at,
+      k.consumed_at || '',
+      k.redeemed_at || '',
+      k.generation_batch_id
+    ].join(','))
+  ].join('\n');
+  return csv;
+}
+// Also support JSON export
+async function exportLicenseKeysJSON(partnerId, filters) {
+  const keys = await db.partner_license_keys.findAll({
+    where: { partner_id: partnerId, ...filters },
+    order: [['generated_at', 'DESC']]
+  });
+  return {
+    exported_at: new Date(),
+    partner: await db.partners.findByPk(partnerId),
+    total_keys: keys.length,
+    keys: keys.map(k => ({
+      license_key: k.license_key,
+      tier: k.tier,
+      status: k.status,
+      generated_at: k.generated_at,
+      consumed_at: k.consumed_at,
+      redeemed_at: k.redeemed_at,
+      batch_id: k.generation_batch_id
+    }))
+  };
+}
+4.3 Webhook Handler (Updated with Partner Context)
+// Backend: /api/webhooks/partner
+async function handlePartnerWebhook(req, res) {
+  const { license_key, event, tier, prev_license_key, ...payload } = req.body;
+  
+  // 1. Validate webhook signature (HMAC)
+  const signature = req.headers['x-appsumo-signature'];
+  const timestamp = req.headers['x-appsumo-timestamp'];
+  
+  // Find partner by license_key
+  const licenseRecord = await db.partner_license_keys.findOne({
+    where: { license_key },
+    include: [{ model: db.partners }]
+  });
+  
+  if (!licenseRecord) {
+    return res.status(404).json({ success: false, error: 'License key not found' });
+  }
+  
+  const partner = licenseRecord.partner;
+  
+  // Validate signature using partner's webhook_secret
+  if (!validateHMACSignature(req.body, timestamp, signature, partner.webhook_secret)) {
+    return res.status(401).json({ success: false, error: 'Invalid signature' });
+  }
+  
+  // 2. Handle test webhooks
+  if (payload.test === true) {
+    return res.json({ event, success: true });
+  }
+  
+  // 3. Process event
+  switch (event) {
+    case 'purchase':
+      await handlePurchaseEvent(licenseRecord, payload);
+      break;
+    case 'activate':
+      await handleActivateEvent(licenseRecord, payload);
+      break;
+    case 'upgrade':
+      await handleUpgradeEvent(licenseRecord, prev_license_key, tier, payload);
+      break;
+    case 'downgrade':
+      await handleDowngradeEvent(licenseRecord, prev_license_key, tier, payload);
+      break;
+    case 'deactivate':
+      await handleDeactivateEvent(licenseRecord, payload);
+      break;
+  }
+  
+  // 4. Return success
+  return res.json({ event, success: true });
+}
+async function handlePurchaseEvent(licenseRecord, payload) {
+  await db.partner_license_keys.update({
+    status: 'consumed',
+    consumed_at: new Date()
+  }, {
+    where: { license_key: licenseRecord.license_key }
+  });
+  
+  await db.partner_license_events.create({
+    license_key: licenseRecord.license_key,
+    partner_id: licenseRecord.partner_id,
+    event_type: 'consumed',
+    previous_status: 'generated',
+    new_status: 'consumed',
+    triggered_by: 'webhook',
+    webhook_payload: payload,
+    tier: licenseRecord.tier
+  });
+}
+async function handleActivateEvent(licenseRecord, payload) {
+  await db.partner_license_keys.update({
+    status: 'redeemed',
+    redeemed_at: new Date()
+  }, {
+    where: { license_key: licenseRecord.license_key }
+  });
+  
+  await db.partner_license_events.create({
+    license_key: licenseRecord.license_key,
+    partner_id: licenseRecord.partner_id,
+    event_type: 'redeemed',
+    previous_status: 'consumed',
+    new_status: 'redeemed',
+    triggered_by: 'webhook',
+    webhook_payload: payload,
+    tier: licenseRecord.tier
+  });
+}
+async function handleUpgradeEvent(licenseRecord, prevLicenseKey, newTier, payload) {
+  // Mark old key as upgraded
+  const oldKey = await db.partner_license_keys.findOne({
+    where: { license_key: prevLicenseKey }
+  });
+  
+  await db.partner_license_keys.update({
+    status: 'upgraded',
+    upgraded_at: new Date(),
+    upgraded_to_key: licenseRecord.license_key
+  }, {
+    where: { license_key: prevLicenseKey }
+  });
+  
+  // Mark new key as consumed and redeemed immediately
+  await db.partner_license_keys.update({
+    status: 'redeemed',
+    consumed_at: new Date(),
+    redeemed_at: new Date(),
+    previous_key: prevLicenseKey,
+    user_id: oldKey.user_id  // Transfer user
+  }, {
+    where: { license_key: licenseRecord.license_key }
+  });
+  
+  // Update user
+  await db.users.update({
+    partner_license_key: licenseRecord.license_key,
+    partner_tier: newTier
+  }, {
+    where: { id: oldKey.user_id }
+  });
+  
+  // Log events
+  await db.partner_license_events.create({
+    license_key: licenseRecord.license_key,
+    partner_id: licenseRecord.partner_id,
+    event_type: 'upgraded',
+    previous_status: 'generated',
+    new_status: 'redeemed',
+    triggered_by: 'webhook',
+    webhook_payload: payload,
+    previous_tier: oldKey.tier,
+    tier: newTier,
+    user_id: oldKey.user_id
+  });
+}
+// Similar for downgrade and deactivate...
+4.4 OAuth Callback (Updated with Partner Context)
+// Backend: /api/auth/partner/callback
+async function handlePartnerOAuthCallback(req, res) {
+  const { code } = req.query;
+  
+  if (!code) {
+    return res.status(400).send('Missing authorization code');
+  }
+  
+  // Determine which partner based on request source
+  // (Could be from subdomain, query param, or session)
+  const partnerName = req.query.partner || req.session.partner || 'appsumo';
+  const partner = await db.partners.findOne({ where: { name: partnerName } });
+  
+  try {
+    // 1. Exchange code for access token
+    const tokenResponse = await fetch(`${partner.oauth_redirect_url}/token/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: partner.oauth_client_id,
+        client_secret: partner.oauth_client_secret,
+        code: code,
+        redirect_uri: `${process.env.APP_URL}/api/auth/partner/callback?partner=${partnerName}`,
+        grant_type: 'authorization_code'
+      })
+    });
+    
+    const { access_token, refresh_token } = await tokenResponse.json();
+    
+    // 2. Fetch license details
+    const licenseResponse = await fetch(`${partner.oauth_redirect_url}/license_key/?access_token=${access_token}`);
+    const { license_key, status } = await licenseResponse.json();
+    
+    // 3. Find license in our database
+    const licenseRecord = await db.partner_license_keys.findOne({
+      where: { license_key, partner_id: partner.id }
+    });
+    
+    if (!licenseRecord) {
+      return res.status(404).send('License not found');
+    }
+    
+    // 4. Check if already linked to user
+    if (licenseRecord.user_id) {
+      const existingUser = await db.users.findByPk(licenseRecord.user_id);
+      
+      // Auto-login
+      req.session.userId = existingUser.id;
+      return res.redirect('/dashboard');
+    }
+    
+    // 5. New user - store license data in session
+    req.session.pendingPartnerLicense = {
+      license_key,
+      partner_id: partner.id,
+      partner_name: partner.name,
+      tier: licenseRecord.tier,
+      access_token,
+      refresh_token
+    };
+    
+    // 6. Redirect to onboarding
+    res.redirect(`/onboarding?source=partner&partner=${partnerName}`);
+    
+  } catch (error) {
+    console.error('OAuth error:', error);
+    res.status(500).send('Authentication failed');
+  }
+}
+4.5 Link License After User Signup
+// Backend: Called after user completes signup (Google OAuth or email)
+async function linkPartnerLicense(userId, sessionData) {
+  const { license_key, partner_id, tier } = sessionData.pendingPartnerLicense;
+  
+  // Update license record
+  await db.partner_license_keys.update({
+    user_id: userId,
+    status: 'redeemed',
+    redeemed_at: new Date()
+  }, {
+    where: { license_key }
+  });
+  
+  // Update user
+  await db.users.update({
+    partner_license_key: license_key,
+    partner_id: partner_id,
+    partner_tier: tier,
+    license_status: 'active',
+    subscription_source: 'partner'
+  }, {
+    where: { id: userId }
+  });
+  
+  // Log event
+  await db.partner_license_events.create({
+    license_key,
+    partner_id,
+    event_type: 'redeemed',
+    previous_status: 'consumed',
+    new_status: 'redeemed',
+    triggered_by: 'oauth',
+    user_id: userId,
+    tier
+  });
+  
+  // Clear session
+  delete sessionData.pendingPartnerLicense;
+}
+📊 Part 5: Statistics & Reports
+5.1 Real-time Dashboard Stats
+async function getPartnerDashboardStats(partnerId) {
+  const stats = await db.partner_license_keys.findAll({
+    where: { partner_id: partnerId },
+    attributes: [
+      'status',
+      'tier',
+      [db.fn('COUNT', db.col('id')), 'count']
+    ],
+    group: ['status', 'tier']
+  });
+  
+  // Transform into dashboard format
+  const dashboard = {
+    total_generated: 0,
+    by_status: {
+      generated: 0,
+      consumed: 0,
+      redeemed: 0,
+      upgraded: 0,
+      downgraded: 0,
+      deactivated: 0
+    },
+    by_tier: {
+      1: { generated: 0, consumed: 0, redeemed: 0, available: 0 },
+      2: { generated: 0, consumed: 0, redeemed: 0, available: 0 },
+      3: { generated: 0, consumed: 0, redeemed: 0, available: 0 }
+    }
+  };
+  
+  stats.forEach(stat => {
+    const count = parseInt(stat.get('count'));
+    dashboard.total_generated += count;
+    dashboard.by_status[stat.status] += count;
+    
+    if (stat.tier) {
+      dashboard.by_tier[stat.tier][stat.status] = count;
+      if (stat.status === 'generated') {
+        dashboard.by_tier[stat.tier].available += count;
+      }
+    }
+  });
+  
+  return dashboard;
+}
+5.2 Conversion Funnel Report
+async function getConversionFunnel(partnerId, dateRange) {
+  const funnel = await db.sequelize.query(`
+    SELECT 
+      COUNT(*) FILTER (WHERE status IN ('generated', 'consumed', 'redeemed')) as total_generated,
+      COUNT(*) FILTER (WHERE status IN ('consumed', 'redeemed')) as total_consumed,
+      COUNT(*) FILTER (WHERE status = 'redeemed') as total_redeemed
+    FROM partner_license_keys
+    WHERE partner_id = :partnerId
+      AND generated_at BETWEEN :startDate AND :endDate
+  `, {
+    replacements: { partnerId, ...dateRange },
+    type: db.QueryTypes.SELECT
+  });
+  
+  const data = funnel[0];
+  
+  return {
+    generated: data.total_generated,
+    consumed: data.total_consumed,
+    redeemed: data.total_redeemed,
+    consumed_rate: (data.total_consumed / data.total_generated * 100).toFixed(2) + '%',
+    redemption_rate: (data.total_redeemed / data.total_consumed * 100).toFixed(2) + '%'
+  };
+}
+5.3 Daily Activity Report
+async function getDailyActivity(partnerId, days = 30) {
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - days);
+  
+  const activity = await db.partner_license_events.findAll({
+    where: {
+      partner_id: partnerId,
+      created_at: { [db.Op.gte]: startDate }
+    },
+    attributes: [
+      [db.fn('DATE', db.col('created_at')), 'date'],
+      'event_type',
+      [db.fn('COUNT', db.col('id')), 'count']
+    ],
+    group: ['date', 'event_type'],
+    order: [['date', 'ASC']]
+  });
+  
+  // Format for charting
+  const dailyData = {};
+  activity.forEach(row => {
+    const date = row.get('date');
+    if (!dailyData[date]) {
+      dailyData[date] = { consumed: 0, redeemed: 0, upgraded: 0, deactivated: 0 };
+    }
+    dailyData[date][row.event_type] = parseInt(row.get('count'));
+  });
+  
+  return dailyData;
+}
+🔐 Part 6: Authentication & Authorization
+6.1 Partner User Authentication
+// Login endpoint
+POST /api/partner/auth/login
+{
+  "email": "partner@appsumo.com",
+  "password": "securepassword"
+}
+// Implementation
+async function loginPartnerUser(email, password) {
+  const partnerUser = await db.partner_users.findOne({
+    where: { email, is_active: true },
+    include: [{ model: db.partners, where: { is_active: true } }]
+  });
+  
+  if (!partnerUser) {
+    throw new Error('Invalid credentials');
+  }
+  
+  const isValidPassword = await bcrypt.compare(password, partnerUser.password_hash);
+  
+  if (!isValidPassword) {
+    throw new Error('Invalid credentials');
+  }
+  
+  // Update last login
+  await partnerUser.update({ last_login_at: new Date() });
+  
+  // Create session
+  return {
+    userId: partnerUser.id,
+    partnerId: partnerUser.partner_id,
+    partnerName: partnerUser.partner.name,
+    role: partnerUser.role,
+    token: generateJWT(partnerUser)
+  };
+}
+6.2 Authorization Middleware
+// Middleware to protect partner routes
+function requirePartnerAuth(req, res, next) {
+  if (!req.session.partnerUserId) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  next();
+}
+// Middleware to ensure partner can only access their own data
+async function requirePartnerScope(req, res, next) {
+  const partnerUser = await db.partner_users.findByPk(req.session.partnerUserId);
+  
+  if (!partnerUser) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  
+  // Attach partner context to request
+  req.partnerContext = {
+    userId: partnerUser.id,
+    partnerId: partnerUser.partner_id,
+    role: partnerUser.role
+  };
+  
+  next();
+}
+// Usage
+app.get('/api/partner/licenses', 
+  requirePartnerAuth, 
+  requirePartnerScope, 
+  async (req, res) => {
+    // Query only this partner's licenses
+    const licenses = await db.partner_license_keys.findAll({
+      where: { partner_id: req.partnerContext.partnerId }
+    });
+    
+    res.json(licenses);
+  }
+);
+✅ Part 7: Implementation Checklist
+Phase 1: Database & Core Setup
+ Create all database tables (partners, partner_users, partner_license_keys, etc.)
+ Set up indexes
+ Create seed data for first partner (AppSumo)
+ Set up environment variables
+ Configure partner credentials in database
+Phase 2: Backend API
+ Implement license key generation endpoint
+ Implement export functionality (CSV/JSON)
+ Implement webhook handler with partner context
+ Implement OAuth callback with partner context
+ Implement partner user authentication
+ Implement authorization middleware
+ Implement statistics/reports endpoints
+ Add HMAC signature validation
+Phase 3: Partner Portal Frontend
+ Build login page
+ Build dashboard with stats
+ Build key generation page
+ Build license list page
+ Build license details page
+ Build export functionality
+ Build reports page
+ Add responsive design
+Phase 4: Admin Portal (Optional for MVP)
+ Build partner management
+ Build partner user management
+ Build system-wide reporting
+ Build key generation for any partner
+Phase 5: Integration Testing
+ Test key generation
+ Test export (CSV/JSON)
+ Test webhook events (purchase, activate, upgrade, etc.)
+ Test OAuth flow
+ Test user linking
+ Test statistics accuracy
+ Load testing (10,000+ keys)
+Phase 6: AppSumo Configuration
+ Configure webhook URL in AppSumo Partner Portal
+ Configure OAuth redirect URL in AppSumo Partner Portal
+ Get OAuth credentials from AppSumo
+ Generate initial key batch for AppSumo
+ Export and send keys to AppSumo team
+ Test with AppSumo developer credits
+🎯 MVP Priority
+For fastest time to launch, implement in this order:
+
+Week 1-2: Core Backend
+
+Database schema
+License key generation
+Export functionality
+Webhook handler
+OAuth callback
+Week 3: Partner Portal
+
+Authentication
+Dashboard
+Key generation UI
+License list
+Export UI
+Week 4: Testing & Integration
+
+End-to-end testing
+AppSumo configuration
+Generate first batch
+Test with AppSumo team
+Go live
+Would you like me to now create the actual implementation plan to build this system?
+
