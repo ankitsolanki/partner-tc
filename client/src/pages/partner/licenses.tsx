@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { PartnerLayout } from "@/components/layout/partner-layout";
 import { DataTable, type DataTableColumn } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { LICENSE_STATUSES, TIER_LABELS } from "@/lib/constants";
-import { Plus, Download, Search } from "lucide-react";
+import { Plus, Download, Search, Filter } from "lucide-react";
 import type { PartnerLicenseKey } from "@shared/schema";
 
 interface LicensesResponse {
@@ -33,18 +33,40 @@ interface LicensesResponse {
 const PAGE_SIZE = 50;
 
 export default function PartnerLicenses() {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const search = useSearch();
+
+  const initialStatus = new URLSearchParams(search).get("status") ?? "all";
+  const initialTier = new URLSearchParams(search).get("tier") ?? "all";
+
   const [page, setPage] = useState(1);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [tierFilter, setTierFilter] = useState<string>("all");
-  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
+  const [tierFilter, setTierFilter] = useState<string>(initialTier);
+  const [searchText, setSearchText] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const s = params.get("status") ?? "all";
+    const t = params.get("tier") ?? "all";
+    setStatusFilter(s);
+    setTierFilter(t);
+    setPage(1);
+  }, [search]);
+
+  const syncUrl = (newStatus: string, newTier: string) => {
+    const params = new URLSearchParams();
+    if (newStatus !== "all") params.set("status", newStatus);
+    if (newTier !== "all") params.set("tier", newTier);
+    const qs = params.toString();
+    navigate(`/partner/licenses${qs ? `?${qs}` : ""}`, { replace: true });
+  };
 
   const queryParams = new URLSearchParams();
   queryParams.set("page", String(page));
   queryParams.set("limit", String(PAGE_SIZE));
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
   if (tierFilter !== "all") queryParams.set("tier", tierFilter);
-  if (search) queryParams.set("search", search);
+  if (searchText) queryParams.set("search", searchText);
 
   const { data, isLoading } = useQuery<LicensesResponse>({
     queryKey: [`/api/partner/licenses?${queryParams.toString()}`],
@@ -92,11 +114,13 @@ export default function PartnerLicenses() {
     if (type === "current") {
       if (statusFilter !== "all") exportParams.set("status", statusFilter);
       if (tierFilter !== "all") exportParams.set("tier", tierFilter);
-      if (search) exportParams.set("search", search);
+      if (searchText) exportParams.set("search", searchText);
     }
     const url = `/api/partner/licenses/export?${exportParams.toString()}`;
     window.open(url, "_blank");
   };
+
+  const activeFilterCount = [statusFilter !== "all", tierFilter !== "all", !!searchText].filter(Boolean).length;
 
   return (
     <PartnerLayout>
@@ -107,7 +131,24 @@ export default function PartnerLicenses() {
               Licenses
             </h1>
             <p className="text-sm text-muted-foreground">
-              Manage and track all license keys
+              {activeFilterCount > 0 ? (
+                <span>
+                  Showing{" "}
+                  <span className="font-medium text-foreground">
+                    {statusFilter !== "all"
+                      ? LICENSE_STATUSES.find((s) => s.value === statusFilter)?.label ?? statusFilter
+                      : "all statuses"}
+                  </span>
+                  {tierFilter !== "all" && (
+                    <>
+                      {" "}· <span className="font-medium text-foreground">{TIER_LABELS[Number(tierFilter)] ?? `Tier ${tierFilter}`}</span>
+                    </>
+                  )}
+                  {" "}— {data?.total ?? "..."} license{data?.total !== 1 ? "s" : ""}
+                </span>
+              ) : (
+                "Manage and track all license keys"
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -148,53 +189,77 @@ export default function PartnerLicenses() {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="Search by license key..."
-              value={search}
+              value={searchText}
               onChange={(e) => {
-                setSearch(e.target.value);
+                setSearchText(e.target.value);
                 setPage(1);
               }}
               className="pl-9"
               data-testid="input-search"
             />
           </div>
-          <Select
-            value={statusFilter}
-            onValueChange={(val) => {
-              setStatusFilter(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              {LICENSE_STATUSES.map((s) => (
-                <SelectItem key={s.value} value={s.value}>
-                  {s.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={tierFilter}
-            onValueChange={(val) => {
-              setTierFilter(val);
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="w-[130px]" data-testid="select-tier-filter">
-              <SelectValue placeholder="Tier" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Tiers</SelectItem>
-              {Object.entries(TIER_LABELS).map(([k, v]) => (
-                <SelectItem key={k} value={k}>
-                  {v}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex items-center gap-2">
+            {activeFilterCount > 0 && (
+              <Filter className="h-4 w-4 text-primary" aria-label="Filters active" />
+            )}
+            <Select
+              value={statusFilter}
+              onValueChange={(val) => {
+                setStatusFilter(val);
+                setPage(1);
+                syncUrl(val, tierFilter);
+              }}
+            >
+              <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                {LICENSE_STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={tierFilter}
+              onValueChange={(val) => {
+                setTierFilter(val);
+                setPage(1);
+                syncUrl(statusFilter, val);
+              }}
+            >
+              <SelectTrigger className="w-[130px]" data-testid="select-tier-filter">
+                <SelectValue placeholder="Tier" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Tiers</SelectItem>
+                {Object.entries(TIER_LABELS).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>
+                    {v}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {activeFilterCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setStatusFilter("all");
+                  setTierFilter("all");
+                  setSearchText("");
+                  setPage(1);
+                  navigate("/partner/licenses", { replace: true });
+                }}
+                data-testid="button-clear-filters"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         <DataTable
@@ -202,9 +267,22 @@ export default function PartnerLicenses() {
           data={(data?.data ?? []) as (PartnerLicenseKey & Record<string, unknown>)[]}
           isLoading={isLoading}
           emptyTitle="No licenses found"
-          emptyDescription="Generate some license keys to get started."
-          emptyActionLabel="Generate Keys"
-          onEmptyAction={() => navigate("/partner/generate")}
+          emptyDescription={
+            activeFilterCount > 0
+              ? "No licenses match the current filters. Try adjusting or clearing them."
+              : "Generate some license keys to get started."
+          }
+          emptyActionLabel={activeFilterCount > 0 ? "Clear Filters" : "Generate Keys"}
+          onEmptyAction={() => {
+            if (activeFilterCount > 0) {
+              setStatusFilter("all");
+              setTierFilter("all");
+              setSearchText("");
+              navigate("/partner/licenses", { replace: true });
+            } else {
+              navigate("/partner/generate");
+            }
+          }}
           onRowClick={(row) => navigate(`/partner/licenses/${row.licenseKey}`)}
           page={data?.page}
           totalPages={data?.totalPages}
