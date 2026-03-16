@@ -3,7 +3,7 @@ import { useSearch } from "wouter";
 import { ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const REDIRECT_URL = "https://app.tinycommand.com";
+const REDIRECT_URL = "https://platform.tinycommand.com";
 const COUNTDOWN_SECS = 5;
 
 const CONFETTI_COLORS = [
