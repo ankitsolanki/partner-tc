@@ -20,7 +20,9 @@ function keycloakCallbackUri(): string {
 }
 
 function appsumoCallbackUri(): string {
-  return `${process.env.APP_BASE_URL ?? ""}/api/auth/partner/callback`;
+  // AppSumo validates this URL with a plain GET (no code/state),
+  // and also expects the redirect_uri used during code exchange to match exactly.
+  return `${process.env.APP_BASE_URL ?? ""}/api/auth/partner/callback?partner=appsumo`;
 }
 
 // ─── PKCE helpers ─────────────────────────────────────────────────────────────
@@ -52,7 +54,7 @@ router.get("/partner/authorize", (req, res) => {
 
 // ─── 2. AppSumo callback → exchange code → fetch license → chain to Keycloak ──
 router.get("/partner/callback", async (req, res) => {
-  const { code, state, error } = req.query;
+  const { code, state, error, partner } = req.query;
 
   if (error) {
     console.error("[AppSumo OAuth] Provider returned error:", error);
@@ -60,6 +62,11 @@ router.get("/partner/callback", async (req, res) => {
   }
 
   if (!code || !state) {
+    // AppSumo Partner Portal pings/validates the redirect URL with no parameters.
+    // Treat that as a health check instead of a hard failure.
+    if (String(partner ?? "").toLowerCase() === "appsumo") {
+      return res.status(200).json({ ok: true });
+    }
     return res.status(400).json({ message: "Missing code or state parameter" });
   }
 
