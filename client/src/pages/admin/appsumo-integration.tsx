@@ -289,7 +289,7 @@ function DocsPanel() {
    │
    ├─ [Customer buys/activates/upgrades]
    │         │
-   │         ▼ POST /api/webhooks/partner
+   │         ▼ POST /api/webhooks/partner?name=appsumo
    │    Webhook Handler
    │    • Validates HMAC signature
    │    • Updates license status in DB
@@ -319,7 +319,7 @@ function DocsPanel() {
           <code className="mx-1 bg-muted px-1 rounded">{"{ event, success: true }"}</code>.
         </p>
 
-        <p className="text-xs font-medium mb-2">Required Headers</p>
+        <p className="text-xs font-medium mb-2">Optional Headers</p>
         <div className="rounded-md border text-xs overflow-hidden mb-4">
           <table className="w-full">
             <thead className="bg-muted/50">
@@ -332,8 +332,8 @@ function DocsPanel() {
             <tbody>
               <tr className="border-t">
                 <td className="p-2 font-mono">x-partner-name</td>
-                <td className="p-2 text-muted-foreground">appsumo</td>
-                <td className="p-2">Yes</td>
+                <td className="p-2 text-muted-foreground">appsumo (for non-query integrations)</td>
+                <td className="p-2">Optional</td>
               </tr>
               <tr className="border-t">
                 <td className="p-2 font-mono">x-webhook-signature</td>
@@ -492,9 +492,9 @@ function DocsPanel() {
         <div className="flex flex-col gap-3">
           {[
             {
-              label: "x-partner-name header",
-              severity: "warn",
-              text: "Our webhook endpoint identifies the partner via an x-partner-name header. AppSumo's real webhooks may not send this. If needed, create a dedicated endpoint /api/webhooks/appsumo that hardcodes the partner name.",
+              label: "Partner identification",
+              severity: "ok",
+              text: "Our webhook endpoint identifies the partner via the ?name= query parameter (e.g., /api/webhooks/partner?name=appsumo). The x-partner-name header is supported as an optional alternative for integrations that can send custom headers.",
             },
             {
               label: "OAuth token endpoint",
@@ -551,7 +551,7 @@ function DocsPanel() {
         <ol className="flex flex-col gap-2 text-xs">
           {[
             "Log into AppSumo Partner Portal → Settings → Integrations",
-            "Set Webhook URL: https://<your-domain>/api/webhooks/partner",
+            "Set Webhook URL: https://<your-domain>/api/webhooks/partner?name=appsumo",
             "AppSumo will send a test webhook — your endpoint must return 200 with { event: \"test\", success: true }",
             "Set OAuth Redirect URL: https://<your-domain>/api/auth/partner/callback?partner=appsumo",
             "AppSumo validates the URL with a GET request — your endpoint must return 200",
@@ -610,9 +610,8 @@ function WebhookTester({ config, baseUrl }: { config: PartnerConfig; baseUrl: st
     }
     if (eventType === "deactivate") { body.license_key = licenseKey || "<key>"; }
 
-    return `curl -X POST ${baseUrl}/api/webhooks/partner \\
+    return `curl -X POST ${baseUrl}/api/webhooks/partner?name=appsumo \\
   -H "Content-Type: application/json" \\
-  -H "x-partner-name: appsumo" \\
   -d '${JSON.stringify(body, null, 2)}'`;
   }, [eventType, licenseKey, prevLicenseKey, newLicenseKey, tier, newTier, userId, baseUrl]);
 
@@ -848,7 +847,7 @@ function WebhookTester({ config, baseUrl }: { config: PartnerConfig; baseUrl: st
 }
 
 function OAuthSetup({ config, baseUrl }: { config: PartnerConfig; baseUrl: string }) {
-  const webhookUrl = `${baseUrl}/api/webhooks/partner`;
+  const webhookUrl = `${baseUrl}/api/webhooks/partner?name=appsumo`;
   const oauthCallbackUrl = `${baseUrl}/api/auth/partner/callback?partner=appsumo`;
 
   const checks = [

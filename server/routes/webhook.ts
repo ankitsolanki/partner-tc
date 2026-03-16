@@ -20,10 +20,14 @@ const webhookPayloadSchema = z.object({
 router.post("/partner", async (req, res) => {
   const signature = req.headers["x-webhook-signature"] as string | undefined;
   const timestamp = req.headers["x-webhook-timestamp"] as string | undefined;
-  const partnerName = req.headers["x-partner-name"] as string | undefined;
+  const partnerNameQuery = req.query.name as string | undefined;
+  const partnerNameHeader = req.headers["x-partner-name"] as string | undefined;
+  const partnerName = partnerNameQuery ?? partnerNameHeader;
 
   if (!partnerName) {
-    return res.status(400).json({ message: "Missing x-partner-name header" });
+    return res
+      .status(400)
+      .json({ message: "Missing partner name. Provide ?name=appsumo or x-partner-name header." });
   }
 
   const partner = await storage.getPartner(partnerName);
