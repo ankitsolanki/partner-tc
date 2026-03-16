@@ -52,11 +52,11 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: "dist/index.cjs",
-    define: {
-      "process.env.NODE_ENV": '"production"',
-    },
+    // define: {
+    //   "process.env.NODE_ENV": '"production"',
+    // },
     minify: true,
-    external: externals,
+    external: [...externals, "../vite.config"],
     logLevel: "info",
   });
 }
