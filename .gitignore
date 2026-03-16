@@ -4,3 +4,7 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+.env
+attached_assets
+pnpm-lock.yaml
+package-lock.json
