@@ -61,23 +61,14 @@ router.get("/partner/callback", async (req, res) => {
     return res.status(400).json({ message: `AppSumo OAuth error: ${error}` });
   }
 
-  if (!code || !state) {
-    // AppSumo Partner Portal pings/validates the redirect URL with no parameters.
-    // Treat that as a health check instead of a hard failure.
+  // Health checks and URL validation from AppSumo hit this endpoint with no code.
+  // Treat those as a simple liveness check and avoid running the OAuth flow.
+  if (!code) {
     if (String(partner ?? "").toLowerCase() === "appsumo") {
       return res.status(200).json({ ok: true });
     }
-    return res.status(400).json({ message: "Missing code or state parameter" });
+    return res.status(400).json({ message: "Missing authorization code" });
   }
-
-  if (!req.session.oauthState || req.session.oauthState !== state) {
-    console.error("[AppSumo OAuth] State mismatch — possible CSRF attempt", {
-      expected: req.session.oauthState,
-      received: state,
-    });
-    return res.status(403).json({ message: "Invalid OAuth state — please restart the flow" });
-  }
-  delete req.session.oauthState;
 
   const clientId = process.env.APPSUMO_CLIENT_ID;
   const clientSecret = process.env.APPSUMO_CLIENT_SECRET;
