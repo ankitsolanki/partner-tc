@@ -68,21 +68,38 @@ async function registerKeycloakUser(
   });
 
   console.log("[Heimdall:1-register] Response status:", res.status);
-  console.log("[Heimdall:1-register] Response headers:", JSON.stringify(Object.fromEntries(res.headers.entries())));
 
   if (res.status === 409) {
-    console.log("[Heimdall:1-register] User already exists on Keycloak (409) — continuing");
+    console.log("[Heimdall:1-register] User already exists on Keycloak (HTTP 409) — continuing");
     return { alreadyExisted: true };
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    console.error("[Heimdall:1-register] FAILED:", res.status, body);
-    throw new HeimdallError("register", `Failed to register user on Keycloak: ${res.status} — ${body}`);
+  const responseBody = await res.text();
+  console.log("[Heimdall:1-register] Response body:", responseBody);
+
+  // Heimdall wraps errors in HTTP 200 with status:"failed"
+  try {
+    const parsed = JSON.parse(responseBody);
+    if (parsed.status === "failed") {
+      const errorMsg = parsed.result?.error?.errorMessage || parsed.result?.message || "";
+      console.log("[Heimdall:1-register] Heimdall returned status:failed. Error:", errorMsg);
+      if (errorMsg.toLowerCase().includes("user exists") || parsed.result?.error?.status_code === 409) {
+        console.log("[Heimdall:1-register] User already exists (detected from response body) — continuing");
+        return { alreadyExisted: true };
+      }
+      throw new HeimdallError("register", `Keycloak register failed: ${errorMsg}`);
+    }
+  } catch (e) {
+    if (e instanceof HeimdallError) throw e;
+    // Not JSON or parse error — continue
   }
 
-  const responseBody = await res.text();
-  console.log("[Heimdall:1-register] SUCCESS. Response:", responseBody);
+  if (!res.ok) {
+    console.error("[Heimdall:1-register] FAILED:", res.status, responseBody);
+    throw new HeimdallError("register", `Failed to register user on Keycloak: ${res.status}`);
+  }
+
+  console.log("[Heimdall:1-register] SUCCESS — user created");
   return { alreadyExisted: false };
 }
 
@@ -180,10 +197,17 @@ async function findRootWorkspace(
   }
 
   const data = (await res.json()) as Record<string, unknown>;
+  const result = data.result as Record<string, unknown> | undefined;
   console.log("[Heimdall:3-findWorkspace] Response keys:", Object.keys(data));
   console.log("[Heimdall:3-findWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
 
-  const workspaceId = (data._id ?? data.id) as string | undefined;
+  // Heimdall returns 200 with status:"failed" when no workspace found
+  if (data.status === "failed") {
+    console.log("[Heimdall:3-findWorkspace] Heimdall returned status:failed —", result?.message || "no workspace");
+    return null;
+  }
+
+  const workspaceId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
     console.log("[Heimdall:3-findWorkspace] No workspace ID in response — will create new");
@@ -242,10 +266,18 @@ async function addWorkspacePlan(
   }
 
   const data = (await res.json()) as Record<string, unknown>;
+  const result = data.result as Record<string, unknown> | undefined;
   console.log("[Heimdall:4-addWorkspace] Response keys:", Object.keys(data));
   console.log("[Heimdall:4-addWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
 
-  const workspaceId = (data._id ?? data.id) as string | undefined;
+  if (data.status === "failed") {
+    const errMsg = (result?.message as string) || "Unknown error";
+    console.error("[Heimdall:4-addWorkspace] Heimdall returned status:failed:", errMsg);
+    throw new HeimdallError("add_workspace", `Heimdall workspace/add failed: ${errMsg}`);
+  }
+
+  // Workspace ID is nested inside result
+  const workspaceId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
     console.error("[Heimdall:4-addWorkspace] No workspace ID in response:", JSON.stringify(data));
