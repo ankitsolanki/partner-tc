@@ -337,14 +337,15 @@ export async function getServiceToken(): Promise<string> {
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  const token = (data.token ?? data.access_token) as string;
+  const result = data.result as Record<string, unknown> | undefined;
+  const token = (data.token ?? result?.token ?? data.access_token ?? result?.access_token) as string | undefined;
 
   if (!token) {
     console.error("[Heimdall:serviceToken] No token in response:", JSON.stringify(data));
     throw new HeimdallError("service_token", "No token in service token response");
   }
 
-  console.log("[Heimdall:serviceToken] SUCCESS — token length:", token.length);
+  console.log("[Heimdall:serviceToken] SUCCESS — token length:", token.length, "| found at:", data.token ? "data.token" : "result.token");
   return token;
 }
 
