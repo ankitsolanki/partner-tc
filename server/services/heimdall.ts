@@ -366,25 +366,41 @@ export async function updateWorkspacePlanViaService(
   const token = await getServiceToken();
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
 
+  const requestBody = {
+    _id: workspaceId,
+    license_code: licenseKey,
+    license_provider: "appsumo",
+    plan_id: planId,
+    type: planType,
+  };
+  console.log("[Heimdall:updatePlan] Request body:", JSON.stringify(requestBody));
+  console.log("[Heimdall:updatePlan] Using service token (length:", token.length, ")");
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json", token },
-    body: JSON.stringify({
-      _id: workspaceId,
-      license_code: licenseKey,
-      license_provider: "appsumo",
-      plan_id: planId,
-      type: planType,
-    }),
+    body: JSON.stringify(requestBody),
   });
+
+  console.log("[Heimdall:updatePlan] Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall:updatePlan] FAILED:", res.status, body);
+    console.error("[Heimdall:updatePlan] HTTP FAILED:", res.status, body);
     throw new HeimdallError("update_plan", `Failed to update workspace plan: ${res.status}`);
   }
 
-  console.log("[Heimdall:updatePlan] SUCCESS:", { workspaceId, tier });
+  const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Heimdall:updatePlan] Response:", JSON.stringify(data).slice(0, 500));
+
+  if (data.status === "failed") {
+    const result = data.result as Record<string, unknown> | undefined;
+    const errMsg = (result?.message as string) || "Unknown error";
+    console.error("[Heimdall:updatePlan] Heimdall returned status:failed:", errMsg);
+    throw new HeimdallError("update_plan", `Heimdall workspace update failed: ${errMsg}`);
+  }
+
+  console.log("[Heimdall:updatePlan] SUCCESS — workspace plan updated:", { workspaceId, tier, planId });
 }
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
