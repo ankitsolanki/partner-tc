@@ -42,12 +42,68 @@ interface LicenseInfo {
 // ─── Brand Constants ──────────────────────────────────────────────────────────
 const TC_LOGO = "https://cdn-v1.tinycommand.com/1234567890/1771243665296/tinybox%20logo%20%281%29.png";
 
+// Product icon SVGs sourced from app-landing/src/lib/brand-icons.tsx
+function ProductIcon({ type, size = 32 }: { type: string; size?: number }) {
+  const id = `${type}-${Math.random().toString(36).slice(2, 6)}`;
+  const s = size;
+  const common = { width: s, height: s, viewBox: "0 0 100 100", fill: "none", xmlns: "http://www.w3.org/2000/svg" };
+
+  switch (type) {
+    case "form":
+      return (
+        <svg {...common}>
+          <circle cx="50" cy="50" r="50" fill={`url(#${id})`}/>
+          <path d="M47.4063 72.4868H31.4746V43.4302L31.5678 43.3254L40.6283 32.4947L43.8892 28.6049L44.8092 27.4985H68.532V43.4419H47.3948V72.4985L47.4063 72.4868Z" fill="white"/>
+          <path d="M68.0947 51.1323H53.7119V65.5151H68.0947V51.1323Z" fill="white"/>
+          <defs><linearGradient id={id} x1="93.6" y1="0.3" x2="-9.2" y2="117.5" gradientUnits="userSpaceOnUse"><stop stopColor="#FFBA08"/><stop offset="1" stopColor="#FF7B52"/></linearGradient></defs>
+        </svg>
+      );
+    case "workflow":
+      return (
+        <svg {...common}>
+          <circle cx="50" cy="50" r="50" fill={`url(#${id})`}/>
+          <path d="M62.7094 60.5243V72.4895H44.1949L29.7598 60.5243L29.5615 60.36V44.4517H44.1949V60.5243H62.7094Z" fill="white"/>
+          <path d="M39.6133 39.4654V27.5H58.128L72.5628 39.4654L72.7613 39.6297V55.5379H58.128V39.4654H39.6133Z" fill="white"/>
+          <defs><linearGradient id={id} x1="140" y1="-36" x2="4" y2="94" gradientUnits="userSpaceOnUse"><stop stopColor="#358CFF"/><stop offset="1" stopColor="#1C3693"/></linearGradient></defs>
+        </svg>
+      );
+    case "table":
+      return (
+        <svg {...common}>
+          <circle cx="50" cy="50" r="50" fill={`url(#${id})`}/>
+          <path d="M42.7064 43.8694H27.5V28.9639H45.1238L45.9815 29.9999L49.034 33.6427L57.5005 43.7692L57.5898 43.8694V71.0405H42.6952V43.8694H42.7064Z" fill="white"/>
+          <path d="M72.5017 28.9639H57.6074V43.8583H72.5017V28.9639Z" fill="white"/>
+          <defs><linearGradient id={id} x1="-12" y1="109" x2="104" y2="-1" gradientUnits="userSpaceOnUse"><stop stopColor="#369B7D"/><stop offset="1" stopColor="#4FDB95"/></linearGradient></defs>
+        </svg>
+      );
+    case "email":
+      return (
+        <svg {...common}>
+          <circle cx="50" cy="50" r="50" fill={`url(#${id})`}/>
+          <path d="M63.8447 39.2642H48.2471V39.2935L48.2549 39.3013H48.2471V60.6978H48.2461V60.7339H63.8447V72.4995H46.3389L36.499 60.7427V39.2563L36.5674 39.1782L46.3389 27.4995H63.8447V39.2642ZM48.2549 60.6978L48.2471 60.7065V60.6978H48.2549Z" fill="white"/>
+          <path d="M63.5177 44.9443H52.9043V55.5578H63.5177V44.9443Z" fill="white"/>
+          <defs><linearGradient id={id} x1="113" y1="-19" x2="-61" y2="155" gradientUnits="userSpaceOnUse"><stop stopColor="#EC3957"/><stop offset="1" stopColor="#FF7B52"/></linearGradient></defs>
+        </svg>
+      );
+    case "agent":
+      return (
+        <svg {...common}>
+          <circle cx="50" cy="50" r="50" fill={`url(#${id})`}/>
+          <path d="M74.999 27.5005V44.1147H74.8926L75.0029 44.2524V72.4995H61.7734V44.2524H38.9375V72.5005H25.0039V44.2524L38.9375 27.7368L39.1309 27.5005H74.999ZM57.626 65.5581H44.0342V51.9673H57.626V65.5581Z" fill="white"/>
+          <defs><linearGradient id={id} x1="0" y1="0" x2="100" y2="100" gradientUnits="userSpaceOnUse"><stop stopColor="#8133F1"/><stop offset="1" stopColor="#360083"/></linearGradient></defs>
+        </svg>
+      );
+    default:
+      return null;
+  }
+}
+
 const PRODUCTS = [
-  { name: "Forms", desc: "Collect responses", gradient: ["#FFBA08", "#FF7B52"] },
-  { name: "Workflows", desc: "Automate tasks", gradient: ["#358CFF", "#1C3693"] },
-  { name: "Tables", desc: "Manage data", gradient: ["#369B7D", "#4FDB95"] },
-  { name: "Email", desc: "Send campaigns", gradient: ["#EC3957", "#FF7B52"] },
-  { name: "Agents", desc: "AI assistants", gradient: ["#8133F1", "#360083"] },
+  { name: "Forms", desc: "Collect responses", type: "form" },
+  { name: "Workflows", desc: "Automate tasks", type: "workflow" },
+  { name: "Tables", desc: "Manage data", type: "table" },
+  { name: "Email", desc: "Send campaigns", type: "email" },
+  { name: "Agents", desc: "AI assistants", type: "agent" },
 ];
 
 const PROVISIONING_PHASES = [
@@ -181,10 +237,7 @@ export default function RedeemSignup() {
             <div className="tc-products">
               {PRODUCTS.map((p) => (
                 <div key={p.name} className="tc-product-chip">
-                  <div
-                    className="tc-product-dot"
-                    style={{ background: `linear-gradient(135deg, ${p.gradient[0]}, ${p.gradient[1]})` }}
-                  />
+                  <ProductIcon type={p.type} size={32} />
                   <div>
                     <span className="tc-product-name">{p.name}</span>
                     <span className="tc-product-desc">{p.desc}</span>
@@ -355,10 +408,7 @@ export default function RedeemSignup() {
           background: rgba(255,255,255,0.08);
           border-color: rgba(255,255,255,0.12);
         }
-        .tc-product-dot {
-          width: 28px;
-          height: 28px;
-          border-radius: 8px;
+        .tc-product-chip svg {
           flex-shrink: 0;
         }
         .tc-product-name {

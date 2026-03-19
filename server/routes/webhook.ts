@@ -115,18 +115,21 @@ router.post("/partner", async (req, res) => {
 
     case "upgrade": {
       console.log("[Webhook:upgrade] ─── Processing upgrade event ───");
-      if (!payload.prev_license_key || !payload.new_license_key || payload.new_tier === undefined) {
-        console.log("[Webhook:upgrade] REJECTED: Missing prev_license_key, new_license_key, or new_tier");
+      // AppSumo sends: license_key = new key, prev_license_key = old key, tier = new tier
+      const upgradeNewKey = payload.license_key ?? payload.new_license_key;
+      const upgradeNewTier = payload.tier ?? payload.new_tier;
+      if (!payload.prev_license_key || !upgradeNewKey || upgradeNewTier === undefined) {
+        console.log("[Webhook:upgrade] REJECTED: Missing fields. prev_license_key:", payload.prev_license_key, "newKey:", upgradeNewKey, "newTier:", upgradeNewTier);
         return res.status(400).json({
-          message: "prev_license_key, new_license_key, and new_tier required for upgrade",
+          message: "prev_license_key, license_key, and tier required for upgrade",
         });
       }
-      console.log("[Webhook:upgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", payload.new_license_key.slice(0, 8) + "...", "| New tier:", payload.new_tier);
+      console.log("[Webhook:upgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", upgradeNewKey.slice(0, 8) + "...", "| New tier:", upgradeNewTier);
       await storage.handleUpgradeEvent(
         partner.id,
         payload.prev_license_key,
-        payload.new_license_key,
-        payload.new_tier,
+        upgradeNewKey,
+        upgradeNewTier,
         webhookData
       );
       console.log("[Webhook:upgrade] Local DB updated");
@@ -143,8 +146,8 @@ router.post("/partner", async (req, res) => {
           console.log("[Webhook:upgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanViaService(
             prevLicense.heimdallWorkspaceId,
-            payload.new_tier,
-            payload.new_license_key
+            upgradeNewTier,
+            upgradeNewKey
           );
           console.log("[Webhook:upgrade] Heimdall plan sync SUCCESS");
         } else {
@@ -159,18 +162,21 @@ router.post("/partner", async (req, res) => {
 
     case "downgrade": {
       console.log("[Webhook:downgrade] ─── Processing downgrade event ───");
-      if (!payload.prev_license_key || !payload.new_license_key || payload.new_tier === undefined) {
-        console.log("[Webhook:downgrade] REJECTED: Missing prev_license_key, new_license_key, or new_tier");
+      // AppSumo sends: license_key = new key, prev_license_key = old key, tier = new tier
+      const downgradeNewKey = payload.license_key ?? payload.new_license_key;
+      const downgradeNewTier = payload.tier ?? payload.new_tier;
+      if (!payload.prev_license_key || !downgradeNewKey || downgradeNewTier === undefined) {
+        console.log("[Webhook:downgrade] REJECTED: Missing fields. prev_license_key:", payload.prev_license_key, "newKey:", downgradeNewKey, "newTier:", downgradeNewTier);
         return res.status(400).json({
-          message: "prev_license_key, new_license_key, and new_tier required for downgrade",
+          message: "prev_license_key, license_key, and tier required for downgrade",
         });
       }
-      console.log("[Webhook:downgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", payload.new_license_key.slice(0, 8) + "...", "| New tier:", payload.new_tier);
+      console.log("[Webhook:downgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", downgradeNewKey.slice(0, 8) + "...", "| New tier:", downgradeNewTier);
       await storage.handleDowngradeEvent(
         partner.id,
         payload.prev_license_key,
-        payload.new_license_key,
-        payload.new_tier,
+        downgradeNewKey,
+        downgradeNewTier,
         webhookData
       );
       console.log("[Webhook:downgrade] Local DB updated");
@@ -186,8 +192,8 @@ router.post("/partner", async (req, res) => {
           console.log("[Webhook:downgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanViaService(
             prevLicense.heimdallWorkspaceId,
-            payload.new_tier,
-            payload.new_license_key
+            downgradeNewTier,
+            downgradeNewKey
           );
           console.log("[Webhook:downgrade] Heimdall plan sync SUCCESS");
         } else {
