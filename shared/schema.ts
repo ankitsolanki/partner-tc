@@ -254,6 +254,7 @@ export const redeemSignupSchema = z.object({
   email: z.string().email("Please enter a valid email address"),
   firstName: z.string().min(1, "First name is required").max(100),
   lastName: z.string().min(1, "Last name is required").max(100),
+  password: z.string().min(8, "Password must be at least 8 characters").max(128),
 });
 
 export const createPartnerUserFormSchema = z.object({

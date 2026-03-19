@@ -393,7 +393,8 @@ export async function provisionAccount(
   firstName: string,
   lastName: string,
   tier: number,
-  licenseKey: string
+  licenseKey: string,
+  password: string
 ): Promise<ProvisioningResult> {
   console.log("[Heimdall:provision] ════════════════════════════════════════");
   console.log("[Heimdall:provision] Starting account provisioning");
@@ -401,6 +402,7 @@ export async function provisionAccount(
   console.log("[Heimdall:provision] Name:", firstName, lastName);
   console.log("[Heimdall:provision] Tier:", tier);
   console.log("[Heimdall:provision] License:", licenseKey.slice(0, 8) + "...");
+  console.log("[Heimdall:provision] Password provided: YES (length:", password.length, ")");
   console.log("[Heimdall:provision] HEIMDALL_BASE:", HEIMDALL_BASE);
   console.log("[Heimdall:provision] ════════════════════════════════════════");
 
@@ -411,11 +413,7 @@ export async function provisionAccount(
   }
   console.log("[Heimdall:provision] Plan mapping:", { planId, planType });
 
-  // Generate a random password for the Keycloak account
-  const password = randomBytes(18).toString("base64url");
-  console.log("[Heimdall:provision] Generated random password (length:", password.length, ")");
-
-  // Step 1: Register on Keycloak
+  // Step 1: Register on Keycloak (using user-provided password)
   console.log("[Heimdall:provision] >>> Step 1/5: Register on Keycloak");
   const { alreadyExisted } = await registerKeycloakUser(email, firstName, lastName, password);
   console.log("[Heimdall:provision] <<< Step 1 done. alreadyExisted:", alreadyExisted);
@@ -447,14 +445,8 @@ export async function provisionAccount(
   });
   console.log("[Heimdall:provision] <<< Step 4 done. workspaceId:", workspaceId);
 
-  // Step 5: For new users, send forgot password email so they can set their own
-  if (!alreadyExisted) {
-    console.log("[Heimdall:provision] >>> Step 5/5: Trigger forgot password (new user)");
-    await triggerForgotPassword(email);
-    console.log("[Heimdall:provision] <<< Step 5 done");
-  } else {
-    console.log("[Heimdall:provision] >>> Step 5/5: SKIPPED (existing user)");
-  }
+  // Step 5: No longer needed — user provides their own password in the signup form
+  console.log("[Heimdall:provision] >>> Step 5/5: SKIPPED (user set password in signup form)");
 
   console.log("[Heimdall:provision] ════════════════════════════════════════");
   console.log("[Heimdall:provision] PROVISIONING COMPLETE");

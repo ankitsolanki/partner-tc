@@ -91,8 +91,8 @@ router.post("/signup", async (req, res) => {
     });
   }
 
-  const { email, firstName, lastName } = parsed.data;
-  console.log("[Redeem:signup] Validated input:", { email, firstName, lastName });
+  const { email, firstName, lastName, password } = parsed.data;
+  console.log("[Redeem:signup] Validated input:", { email, firstName, lastName, passwordLength: password.length });
 
   // 3. Fetch license from DB
   const license = await storage.getLicenseByKey(licenseKey);
@@ -125,7 +125,8 @@ router.post("/signup", async (req, res) => {
       firstName,
       lastName,
       license.tier,
-      licenseKey
+      licenseKey,
+      password
     );
 
     console.log("[Redeem:signup] Provisioning completed:", {
