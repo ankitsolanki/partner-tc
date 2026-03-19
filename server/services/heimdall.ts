@@ -123,13 +123,15 @@ async function addHeimdallUser(
   console.log("[Heimdall:2-addUser] Response keys:", Object.keys(data));
   console.log("[Heimdall:2-addUser] Full response:", JSON.stringify(data).slice(0, 500));
 
-  const token = data.token as string;
   const result = data.result as Record<string, unknown> | undefined;
 
-  console.log("[Heimdall:2-addUser] Token present:", !!token);
   console.log("[Heimdall:2-addUser] Result object keys:", result ? Object.keys(result) : "NO RESULT");
 
+  // Token can be at data.token OR data.result.token (Heimdall nests it inside result)
+  const token = (data.token ?? result?.token) as string | undefined;
   const userId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
+
+  console.log("[Heimdall:2-addUser] Token present:", !!token, "| found at:", data.token ? "data.token" : result?.token ? "result.token" : "NOWHERE");
   console.log("[Heimdall:2-addUser] Extracted userId:", userId);
 
   if (!token) {
