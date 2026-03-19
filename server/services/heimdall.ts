@@ -349,13 +349,19 @@ export async function getServiceToken(): Promise<string> {
   return token;
 }
 
-// ─── Update workspace plan via service token (for webhooks) ───────────────────
-export async function updateWorkspacePlanViaService(
+// ─── Update workspace plan (for webhooks) ─────────────────────────────────────
+// Service token doesn't have workspace permissions, so we get a user token
+// via user/add (upsert) using the redeemer's email, then use that to update.
+export async function updateWorkspacePlanForUser(
   workspaceId: string,
   tier: number,
-  licenseKey: string
+  licenseKey: string,
+  redeemerEmail: string
 ): Promise<void> {
-  console.log("[Heimdall:updatePlan] Updating workspace plan via service token:", { workspaceId, tier, licenseKey: licenseKey.slice(0, 8) });
+  console.log("[Heimdall:updatePlan] ─── Updating workspace plan ───");
+  console.log("[Heimdall:updatePlan] Workspace:", workspaceId);
+  console.log("[Heimdall:updatePlan] Tier:", tier, "| License:", licenseKey.slice(0, 8) + "...");
+  console.log("[Heimdall:updatePlan] Redeemer email:", redeemerEmail);
 
   const planId = PLAN_ID_MAP[tier];
   const planType = PLAN_TYPE_MAP[tier];
@@ -364,9 +370,12 @@ export async function updateWorkspacePlanViaService(
     return;
   }
 
-  const token = await getServiceToken();
-  const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
+  // Get a user token by calling user/add (upsert — won't create a new user)
+  console.log("[Heimdall:updatePlan] Getting user token via user/add...");
+  const { token } = await addHeimdallUser(redeemerEmail, "", "");
+  console.log("[Heimdall:updatePlan] Got user token (length:", token.length, ")");
 
+  const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
   const requestBody = {
     _id: workspaceId,
     license_code: licenseKey,
@@ -375,7 +384,6 @@ export async function updateWorkspacePlanViaService(
     type: planType,
   };
   console.log("[Heimdall:updatePlan] Request body:", JSON.stringify(requestBody));
-  console.log("[Heimdall:updatePlan] Using service token (length:", token.length, ")");
 
   const res = await fetch(url, {
     method: "POST",

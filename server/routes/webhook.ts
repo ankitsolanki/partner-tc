@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validateHmacSignature } from "../utils/crypto";
 import { storage } from "../storage";
-import { updateWorkspacePlanViaService } from "../services/heimdall";
+import { updateWorkspacePlanForUser } from "../services/heimdall";
 import { z } from "zod";
 
 const router = Router();
@@ -142,16 +142,17 @@ router.post("/partner", async (req, res) => {
           heimdallUserId: prevLicense?.heimdallUserId,
           redeemerEmail: prevLicense?.redeemerEmail,
         });
-        if (prevLicense?.heimdallWorkspaceId) {
+        if (prevLicense?.heimdallWorkspaceId && prevLicense?.redeemerEmail) {
           console.log("[Webhook:upgrade] Syncing plan change to Heimdall...");
-          await updateWorkspacePlanViaService(
+          await updateWorkspacePlanForUser(
             prevLicense.heimdallWorkspaceId,
             upgradeNewTier,
-            upgradeNewKey
+            upgradeNewKey,
+            prevLicense.redeemerEmail
           );
           console.log("[Webhook:upgrade] Heimdall plan sync SUCCESS");
         } else {
-          console.log("[Webhook:upgrade] No Heimdall workspace ID — skipping Heimdall sync");
+          console.log("[Webhook:upgrade] Missing Heimdall workspace ID or redeemer email — skipping sync. workspaceId:", prevLicense?.heimdallWorkspaceId, "email:", prevLicense?.redeemerEmail);
         }
       } catch (err) {
         console.error("[Webhook:upgrade] Heimdall sync FAILED (non-blocking):", err);
@@ -188,16 +189,17 @@ router.post("/partner", async (req, res) => {
           heimdallWorkspaceId: prevLicense?.heimdallWorkspaceId,
           heimdallUserId: prevLicense?.heimdallUserId,
         });
-        if (prevLicense?.heimdallWorkspaceId) {
+        if (prevLicense?.heimdallWorkspaceId && prevLicense?.redeemerEmail) {
           console.log("[Webhook:downgrade] Syncing plan change to Heimdall...");
-          await updateWorkspacePlanViaService(
+          await updateWorkspacePlanForUser(
             prevLicense.heimdallWorkspaceId,
             downgradeNewTier,
-            downgradeNewKey
+            downgradeNewKey,
+            prevLicense.redeemerEmail
           );
           console.log("[Webhook:downgrade] Heimdall plan sync SUCCESS");
         } else {
-          console.log("[Webhook:downgrade] No Heimdall workspace ID — skipping Heimdall sync");
+          console.log("[Webhook:downgrade] Missing Heimdall workspace ID or redeemer email — skipping sync. workspaceId:", prevLicense?.heimdallWorkspaceId, "email:", prevLicense?.redeemerEmail);
         }
       } catch (err) {
         console.error("[Webhook:downgrade] Heimdall sync FAILED (non-blocking):", err);
