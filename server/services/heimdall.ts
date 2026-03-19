@@ -40,39 +40,49 @@ async function registerKeycloakUser(
 ): Promise<{ alreadyExisted: boolean }> {
   const url = `${HEIMDALL_BASE}/service/public/v0/external/keycloak/admin/register-user`;
 
-  console.log("[Heimdall] Registering user on Keycloak:", email);
+  console.log("[Heimdall:1-register] ─── Registering user on Keycloak ───");
+  console.log("[Heimdall:1-register] URL:", url);
+  console.log("[Heimdall:1-register] Email:", email);
+  console.log("[Heimdall:1-register] Name:", firstName, lastName);
+
+  const requestBody = {
+    email,
+    firstName,
+    lastName,
+    enabled: true,
+    emailVerified: false,
+    credentials: [
+      {
+        type: "password",
+        value: password,
+        temporary: false,
+      },
+    ],
+  };
+  console.log("[Heimdall:1-register] Request body (password redacted):", JSON.stringify({ ...requestBody, credentials: "[REDACTED]" }));
 
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email,
-      firstName,
-      lastName,
-      enabled: true,
-      emailVerified: false,
-      credentials: [
-        {
-          type: "password",
-          value: password,
-          temporary: false,
-        },
-      ],
-    }),
+    body: JSON.stringify(requestBody),
   });
 
+  console.log("[Heimdall:1-register] Response status:", res.status);
+  console.log("[Heimdall:1-register] Response headers:", JSON.stringify(Object.fromEntries(res.headers.entries())));
+
   if (res.status === 409) {
-    console.log("[Heimdall] User already exists on Keycloak:", email);
+    console.log("[Heimdall:1-register] User already exists on Keycloak (409) — continuing");
     return { alreadyExisted: true };
   }
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall] Keycloak register failed:", res.status, body);
-    throw new HeimdallError("register", `Failed to register user on Keycloak: ${res.status}`);
+    console.error("[Heimdall:1-register] FAILED:", res.status, body);
+    throw new HeimdallError("register", `Failed to register user on Keycloak: ${res.status} — ${body}`);
   }
 
-  console.log("[Heimdall] User registered on Keycloak:", email);
+  const responseBody = await res.text();
+  console.log("[Heimdall:1-register] SUCCESS. Response:", responseBody);
   return { alreadyExisted: false };
 }
 
@@ -84,41 +94,55 @@ async function addHeimdallUser(
 ): Promise<{ token: string; userId: string }> {
   const url = `${HEIMDALL_BASE}/service/v0/user/add`;
 
-  console.log("[Heimdall] Adding user to Heimdall:", email);
+  console.log("[Heimdall:2-addUser] ─── Adding user to Heimdall MongoDB ───");
+  console.log("[Heimdall:2-addUser] URL:", url);
+
+  const requestBody = {
+    email_id: email,
+    name: `${firstName} ${lastName}`,
+    first_name: firstName,
+    last_name: lastName,
+  };
+  console.log("[Heimdall:2-addUser] Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email_id: email,
-      name: `${firstName} ${lastName}`,
-      first_name: firstName,
-      last_name: lastName,
-    }),
+    body: JSON.stringify(requestBody),
   });
+
+  console.log("[Heimdall:2-addUser] Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall] user/add failed:", res.status, body);
-    throw new HeimdallError("add_user", `Failed to add user to Heimdall: ${res.status}`);
+    console.error("[Heimdall:2-addUser] FAILED:", res.status, body);
+    throw new HeimdallError("add_user", `Failed to add user to Heimdall: ${res.status} — ${body}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Heimdall:2-addUser] Response keys:", Object.keys(data));
+  console.log("[Heimdall:2-addUser] Full response:", JSON.stringify(data).slice(0, 500));
+
   const token = data.token as string;
   const result = data.result as Record<string, unknown> | undefined;
+
+  console.log("[Heimdall:2-addUser] Token present:", !!token);
+  console.log("[Heimdall:2-addUser] Result object keys:", result ? Object.keys(result) : "NO RESULT");
+
   const userId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
+  console.log("[Heimdall:2-addUser] Extracted userId:", userId);
 
   if (!token) {
-    console.error("[Heimdall] No token in user/add response:", data);
+    console.error("[Heimdall:2-addUser] No token in response! Full data:", JSON.stringify(data));
     throw new HeimdallError("add_user", "No token returned from Heimdall user/add");
   }
 
   if (!userId) {
-    console.error("[Heimdall] No user ID in user/add response:", data);
+    console.error("[Heimdall:2-addUser] No user ID in response! Full data:", JSON.stringify(data));
     throw new HeimdallError("add_user", "No user ID returned from Heimdall user/add");
   }
 
-  console.log("[Heimdall] User added/upserted:", { userId, email });
+  console.log("[Heimdall:2-addUser] SUCCESS:", { userId, email, tokenLength: token.length });
   return { token, userId };
 }
 
@@ -130,33 +154,41 @@ async function findRootWorkspace(
   const params = new URLSearchParams({ owner_id: ownerId, return_root: "true" });
   const url = `${HEIMDALL_BASE}/service/v0/workspace/find/one?${params.toString()}`;
 
-  console.log("[Heimdall] Finding root workspace for owner:", ownerId);
+  console.log("[Heimdall:3-findWorkspace] ─── Finding root workspace ───");
+  console.log("[Heimdall:3-findWorkspace] URL:", url);
+  console.log("[Heimdall:3-findWorkspace] Owner ID:", ownerId);
+  console.log("[Heimdall:3-findWorkspace] Token (first 20):", token.slice(0, 20) + "...");
 
   const res = await fetch(url, {
     method: "GET",
     headers: { token },
   });
 
+  console.log("[Heimdall:3-findWorkspace] Response status:", res.status);
+
   if (!res.ok) {
+    const body = await res.text();
+    console.log("[Heimdall:3-findWorkspace] Not OK:", res.status, body);
     if (res.status === 404) {
-      console.log("[Heimdall] No workspace found for owner:", ownerId);
+      console.log("[Heimdall:3-findWorkspace] No workspace found (404) — will create new");
       return null;
     }
-    const body = await res.text();
-    console.error("[Heimdall] workspace/find/one failed:", res.status, body);
-    // Don't throw — we'll create a new workspace
+    console.error("[Heimdall:3-findWorkspace] Unexpected error — will create new workspace");
     return null;
   }
 
   const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Heimdall:3-findWorkspace] Response keys:", Object.keys(data));
+  console.log("[Heimdall:3-findWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
+
   const workspaceId = (data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
-    console.log("[Heimdall] Workspace response has no ID:", data);
+    console.log("[Heimdall:3-findWorkspace] No workspace ID in response — will create new");
     return null;
   }
 
-  console.log("[Heimdall] Found root workspace:", workspaceId);
+  console.log("[Heimdall:3-findWorkspace] SUCCESS — found workspace:", workspaceId);
   return workspaceId;
 }
 
@@ -174,6 +206,10 @@ async function addWorkspacePlan(
 ): Promise<string> {
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
 
+  console.log("[Heimdall:4-addWorkspace] ─── Adding workspace/plan ───");
+  console.log("[Heimdall:4-addWorkspace] URL:", url);
+  console.log("[Heimdall:4-addWorkspace] Mode:", params.workspaceId ? "UPDATE existing" : "CREATE new");
+
   const body: Record<string, unknown> = {
     owner_id: params.ownerId,
     name: params.workspaceName,
@@ -187,10 +223,7 @@ async function addWorkspacePlan(
     body._id = params.workspaceId;
   }
 
-  console.log("[Heimdall] Adding workspace/plan:", {
-    workspaceId: params.workspaceId ?? "NEW",
-    planId: params.planId,
-  });
+  console.log("[Heimdall:4-addWorkspace] Request body:", JSON.stringify(body));
 
   const res = await fetch(url, {
     method: "POST",
@@ -198,21 +231,26 @@ async function addWorkspacePlan(
     body: JSON.stringify(body),
   });
 
+  console.log("[Heimdall:4-addWorkspace] Response status:", res.status);
+
   if (!res.ok) {
     const resBody = await res.text();
-    console.error("[Heimdall] workspace/add failed:", res.status, resBody);
-    throw new HeimdallError("add_workspace", `Failed to add workspace/plan: ${res.status}`);
+    console.error("[Heimdall:4-addWorkspace] FAILED:", res.status, resBody);
+    throw new HeimdallError("add_workspace", `Failed to add workspace/plan: ${res.status} — ${resBody}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Heimdall:4-addWorkspace] Response keys:", Object.keys(data));
+  console.log("[Heimdall:4-addWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
+
   const workspaceId = (data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
-    console.error("[Heimdall] No workspace ID in add response:", data);
+    console.error("[Heimdall:4-addWorkspace] No workspace ID in response:", JSON.stringify(data));
     throw new HeimdallError("add_workspace", "No workspace ID returned from Heimdall");
   }
 
-  console.log("[Heimdall] Workspace/plan created/updated:", workspaceId);
+  console.log("[Heimdall:4-addWorkspace] SUCCESS — workspace:", workspaceId);
   return workspaceId;
 }
 
@@ -220,7 +258,9 @@ async function addWorkspacePlan(
 async function triggerForgotPassword(email: string): Promise<void> {
   const url = `${HEIMDALL_BASE}/service/public/v0/user/forgot/password`;
 
-  console.log("[Heimdall] Triggering forgot password for:", email);
+  console.log("[Heimdall:5-forgotPwd] ─── Triggering forgot password ───");
+  console.log("[Heimdall:5-forgotPwd] URL:", url);
+  console.log("[Heimdall:5-forgotPwd] Email:", email);
 
   const res = await fetch(url, {
     method: "POST",
@@ -228,18 +268,22 @@ async function triggerForgotPassword(email: string): Promise<void> {
     body: JSON.stringify({ email_id: email }),
   });
 
+  console.log("[Heimdall:5-forgotPwd] Response status:", res.status);
+
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall] forgot/password failed:", res.status, body);
-    // Non-critical — don't throw, just log
+    console.error("[Heimdall:5-forgotPwd] FAILED (non-critical):", res.status, body);
   } else {
-    console.log("[Heimdall] Forgot password email sent for:", email);
+    const body = await res.text();
+    console.log("[Heimdall:5-forgotPwd] SUCCESS:", body.slice(0, 200));
   }
 }
 
 // ─── Service token (for webhook-triggered plan updates) ───────────────────────
 export async function getServiceToken(): Promise<string> {
   const url = `${HEIMDALL_BASE}/service/v0/get/signed/token`;
+
+  console.log("[Heimdall:serviceToken] Getting service token from:", url);
 
   const res = await fetch(url, {
     method: "POST",
@@ -250,9 +294,11 @@ export async function getServiceToken(): Promise<string> {
     },
   });
 
+  console.log("[Heimdall:serviceToken] Response status:", res.status);
+
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall] get/signed/token failed:", res.status, body);
+    console.error("[Heimdall:serviceToken] FAILED:", res.status, body);
     throw new HeimdallError("service_token", `Failed to get service token: ${res.status}`);
   }
 
@@ -260,9 +306,11 @@ export async function getServiceToken(): Promise<string> {
   const token = (data.token ?? data.access_token) as string;
 
   if (!token) {
+    console.error("[Heimdall:serviceToken] No token in response:", JSON.stringify(data));
     throw new HeimdallError("service_token", "No token in service token response");
   }
 
+  console.log("[Heimdall:serviceToken] SUCCESS — token length:", token.length);
   return token;
 }
 
@@ -272,10 +320,12 @@ export async function updateWorkspacePlanViaService(
   tier: number,
   licenseKey: string
 ): Promise<void> {
+  console.log("[Heimdall:updatePlan] Updating workspace plan via service token:", { workspaceId, tier, licenseKey: licenseKey.slice(0, 8) });
+
   const planId = PLAN_ID_MAP[tier];
   const planType = PLAN_TYPE_MAP[tier];
   if (!planId || !planType) {
-    console.error("[Heimdall] Unknown tier for plan update:", tier);
+    console.error("[Heimdall:updatePlan] Unknown tier:", tier);
     return;
   }
 
@@ -296,11 +346,11 @@ export async function updateWorkspacePlanViaService(
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall] Service workspace/add failed:", res.status, body);
+    console.error("[Heimdall:updatePlan] FAILED:", res.status, body);
     throw new HeimdallError("update_plan", `Failed to update workspace plan: ${res.status}`);
   }
 
-  console.log("[Heimdall] Workspace plan updated via service token:", { workspaceId, tier });
+  console.log("[Heimdall:updatePlan] SUCCESS:", { workspaceId, tier });
 }
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
@@ -311,28 +361,47 @@ export async function provisionAccount(
   tier: number,
   licenseKey: string
 ): Promise<ProvisioningResult> {
+  console.log("[Heimdall:provision] ════════════════════════════════════════");
+  console.log("[Heimdall:provision] Starting account provisioning");
+  console.log("[Heimdall:provision] Email:", email);
+  console.log("[Heimdall:provision] Name:", firstName, lastName);
+  console.log("[Heimdall:provision] Tier:", tier);
+  console.log("[Heimdall:provision] License:", licenseKey.slice(0, 8) + "...");
+  console.log("[Heimdall:provision] HEIMDALL_BASE:", HEIMDALL_BASE);
+  console.log("[Heimdall:provision] ════════════════════════════════════════");
+
   const planId = PLAN_ID_MAP[tier];
   const planType = PLAN_TYPE_MAP[tier];
   if (!planId || !planType) {
     throw new HeimdallError("validation", `Unknown tier: ${tier}`);
   }
+  console.log("[Heimdall:provision] Plan mapping:", { planId, planType });
 
   // Generate a random password for the Keycloak account
   const password = randomBytes(18).toString("base64url");
+  console.log("[Heimdall:provision] Generated random password (length:", password.length, ")");
 
   // Step 1: Register on Keycloak
+  console.log("[Heimdall:provision] >>> Step 1/5: Register on Keycloak");
   const { alreadyExisted } = await registerKeycloakUser(email, firstName, lastName, password);
+  console.log("[Heimdall:provision] <<< Step 1 done. alreadyExisted:", alreadyExisted);
 
   // Step 2: Add/upsert in Heimdall MongoDB
+  console.log("[Heimdall:provision] >>> Step 2/5: Add user to Heimdall");
   const { token, userId } = await addHeimdallUser(email, firstName, lastName);
+  console.log("[Heimdall:provision] <<< Step 2 done. userId:", userId);
 
   // Step 3: Find existing root workspace
+  console.log("[Heimdall:provision] >>> Step 3/5: Find root workspace");
   const existingWorkspaceId = await findRootWorkspace(userId, token);
+  console.log("[Heimdall:provision] <<< Step 3 done. existingWorkspaceId:", existingWorkspaceId ?? "NONE");
 
   // Step 4: Add/update workspace with plan
+  console.log("[Heimdall:provision] >>> Step 4/5: Add workspace/plan");
   const workspaceName = firstName
     ? `${firstName}'s Workspace`
     : "Your Workspace";
+  console.log("[Heimdall:provision] Workspace name:", workspaceName);
 
   const workspaceId = await addWorkspacePlan(token, {
     workspaceId: existingWorkspaceId,
@@ -342,11 +411,23 @@ export async function provisionAccount(
     planId,
     planType,
   });
+  console.log("[Heimdall:provision] <<< Step 4 done. workspaceId:", workspaceId);
 
   // Step 5: For new users, send forgot password email so they can set their own
   if (!alreadyExisted) {
+    console.log("[Heimdall:provision] >>> Step 5/5: Trigger forgot password (new user)");
     await triggerForgotPassword(email);
+    console.log("[Heimdall:provision] <<< Step 5 done");
+  } else {
+    console.log("[Heimdall:provision] >>> Step 5/5: SKIPPED (existing user)");
   }
+
+  console.log("[Heimdall:provision] ════════════════════════════════════════");
+  console.log("[Heimdall:provision] PROVISIONING COMPLETE");
+  console.log("[Heimdall:provision] userId:", userId);
+  console.log("[Heimdall:provision] workspaceId:", workspaceId);
+  console.log("[Heimdall:provision] isNewUser:", !alreadyExisted);
+  console.log("[Heimdall:provision] ════════════════════════════════════════");
 
   return {
     heimdallUserId: userId,

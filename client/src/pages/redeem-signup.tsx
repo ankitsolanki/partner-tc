@@ -50,6 +50,8 @@ export default function RedeemSignup() {
   const [errorMessage, setErrorMessage] = useState("");
   const [currentStep, setCurrentStep] = useState(0);
 
+  console.log("[RedeemSignup] Component rendered. Current phase:", phase);
+
   // Fetch license info from session
   const {
     data: licenseInfo,
@@ -57,16 +59,38 @@ export default function RedeemSignup() {
     isLoading: licenseLoading,
   } = useQuery<LicenseInfo>({
     queryKey: ["/api/redeem/license-info"],
-    queryFn: getQueryFn({ on401: "throw" }),
+    queryFn: async ({ queryKey }) => {
+      console.log("[RedeemSignup] Fetching license info from:", queryKey[0]);
+      const res = await fetch(queryKey[0] as string, { credentials: "include" });
+      console.log("[RedeemSignup] License info response status:", res.status);
+      console.log("[RedeemSignup] License info response headers:", JSON.stringify(Object.fromEntries(res.headers.entries())));
+      if (!res.ok) {
+        const text = await res.text();
+        console.error("[RedeemSignup] License info error response:", text);
+        throw new Error(`${res.status}: ${text}`);
+      }
+      const data = await res.json();
+      console.log("[RedeemSignup] License info data:", JSON.stringify(data));
+      return data;
+    },
     retry: false,
   });
 
   // Set phase based on license query result
   useEffect(() => {
+    console.log("[RedeemSignup] License query state changed:", {
+      isLoading: licenseLoading,
+      hasData: !!licenseInfo,
+      hasError: !!licenseError,
+      errorMessage: licenseError?.message,
+    });
+
     if (licenseLoading) return;
     if (licenseInfo) {
+      console.log("[RedeemSignup] Setting phase to FORM. License info:", licenseInfo);
       setPhase("form");
     } else if (licenseError) {
+      console.error("[RedeemSignup] Setting phase to ERROR. Error:", licenseError.message);
       setPhase("error");
       const msg = licenseError.message || "";
       if (msg.includes("409")) {
@@ -102,10 +126,14 @@ export default function RedeemSignup() {
   // Signup mutation
   const signupMutation = useMutation({
     mutationFn: async (data: FormValues) => {
+      console.log("[RedeemSignup] Calling POST /api/redeem/signup with:", JSON.stringify(data));
       const res = await apiRequest("POST", "/api/redeem/signup", data);
-      return res.json();
+      const result = await res.json();
+      console.log("[RedeemSignup] Signup response:", JSON.stringify(result));
+      return result;
     },
     onSuccess: (result: { name: string; email: string }) => {
+      console.log("[RedeemSignup] Signup SUCCESS! Navigating to success page in 1.2s...", result);
       // Allow final animation step to show before navigating
       setCurrentStep(PROVISIONING_PHASES.length - 1);
       setTimeout(() => {
@@ -113,16 +141,20 @@ export default function RedeemSignup() {
           name: result.name,
           email: result.email,
         });
-        navigate(`/redeem/success?${params.toString()}`);
+        const url = `/redeem/success?${params.toString()}`;
+        console.log("[RedeemSignup] Navigating to:", url);
+        navigate(url);
       }, 1200);
     },
     onError: (error: Error) => {
+      console.error("[RedeemSignup] Signup FAILED:", error.message);
       setPhase("error");
       setErrorMessage(error.message || "Account provisioning failed. Please try again.");
     },
   });
 
   const onSubmit = (data: FormValues) => {
+    console.log("[RedeemSignup] Form submitted. Transitioning to provisioning phase...");
     setPhase("provisioning");
     setCurrentStep(0);
     signupMutation.mutate(data);

@@ -105,6 +105,15 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      console.log("════════════════════════════════════════════════════════════");
+      console.log("  Partner-TC server started");
+      console.log("  Port:", port);
+      console.log("  NODE_ENV:", process.env.NODE_ENV);
+      console.log("  APP_BASE_URL:", process.env.APP_BASE_URL);
+      console.log("  HEIMDALL_API_URL:", process.env.HEIMDALL_API_URL || "(default: https://heimdallapi.tinycommand.com)");
+      console.log("  KEYCLOAK flow: REMOVED (using Heimdall server-side provisioning)");
+      console.log("  Build timestamp:", new Date().toISOString());
+      console.log("════════════════════════════════════════════════════════════");
     },
   );
 })();
