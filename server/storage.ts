@@ -458,10 +458,14 @@ export class DatabaseStorage implements IStorage {
 
   async handleActivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
     const existing = await this.getLicenseByKey(licenseKey);
-    const previousStatus = existing?.status ?? LICENSE_STATUS.CONSUMED;
+    const previousStatus = existing?.status ?? LICENSE_STATUS.GENERATED;
 
-    const updated = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.REDEEMED, {
-      redeemedAt: new Date(),
+    // Activate webhook means user clicked "Activate" on AppSumo.
+    // Set to CONSUMED (ready to redeem), NOT REDEEMED.
+    // REDEEMED is only set after the user completes the signup form
+    // and Heimdall provisioning succeeds.
+    const updated = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.CONSUMED, {
+      consumedAt: new Date(),
     });
 
     await this.createLicenseEvent({
@@ -469,7 +473,7 @@ export class DatabaseStorage implements IStorage {
       partnerId,
       eventType: "activate",
       previousStatus,
-      newStatus: LICENSE_STATUS.REDEEMED,
+      newStatus: LICENSE_STATUS.CONSUMED,
       triggeredBy: "webhook",
       webhookPayload: payload,
       tier: existing?.tier,

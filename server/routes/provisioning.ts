@@ -7,14 +7,20 @@ const router = Router();
 
 // ─── GET /api/redeem/license-info ─────────────────────────────────────────────
 router.get("/license-info", async (req, res) => {
-  console.log("[Redeem:license-info] ─── GET /api/redeem/license-info ───");
+  console.log("[Redeem:license-info] ═══════════════════════════════════════");
+  console.log("[Redeem:license-info] GET /api/redeem/license-info");
   console.log("[Redeem:license-info] Session ID:", req.session.id);
+  console.log("[Redeem:license-info] Cookie header:", req.headers.cookie || "NO COOKIE");
+  console.log("[Redeem:license-info] pendingLicenseKey (FULL):", req.session.pendingLicenseKey || "NULL");
+  console.log("[Redeem:license-info] All session keys:", JSON.stringify(Object.keys(req.session)));
   console.log("[Redeem:license-info] Session data:", JSON.stringify({
-    pendingLicenseKey: req.session.pendingLicenseKey ? req.session.pendingLicenseKey.slice(0, 8) + "..." : null,
+    pendingLicenseKey: req.session.pendingLicenseKey || null,
     partnerUserId: req.session.partnerUserId,
     partnerId: req.session.partnerId,
     isAdmin: req.session.isAdmin,
+    oauthState: req.session.oauthState ? "SET" : null,
   }));
+  console.log("[Redeem:license-info] ═══════════════════════════════════════");
 
   const licenseKey = req.session.pendingLicenseKey;
   if (!licenseKey) {
