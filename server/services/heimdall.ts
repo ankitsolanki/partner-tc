@@ -104,7 +104,7 @@ async function registerKeycloakUser(
 }
 
 // ─── Step 2: Add/upsert user in Heimdall MongoDB ─────────────────────────────
-async function addHeimdallUser(
+export async function addHeimdallUser(
   email: string,
   firstName: string,
   lastName: string

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { validateHmacSignature } from "../utils/crypto";
 import { storage } from "../storage";
-import { updateWorkspacePlanForUser } from "../services/heimdall";
+import { updateWorkspacePlanForUser, addHeimdallUser } from "../services/heimdall";
 import { z } from "zod";
 
 const router = Router();
@@ -216,7 +216,47 @@ router.post("/partner", async (req, res) => {
       }
       console.log("[Webhook:deactivate] Key:", payload.license_key.slice(0, 8) + "...");
       await storage.handleDeactivateEvent(partner.id, payload.license_key, webhookData);
-      console.log("[Webhook:deactivate] SUCCESS — license deactivated");
+      console.log("[Webhook:deactivate] Local DB updated — license deactivated");
+
+      // Move user to free plan on Heimdall
+      try {
+        const license = await storage.getLicenseByKey(payload.license_key);
+        console.log("[Webhook:deactivate] License Heimdall data:", {
+          heimdallWorkspaceId: license?.heimdallWorkspaceId,
+          redeemerEmail: license?.redeemerEmail,
+        });
+        if (license?.heimdallWorkspaceId && license?.redeemerEmail) {
+          console.log("[Webhook:deactivate] Moving workspace to free plan on Heimdall...");
+          const { token } = await addHeimdallUser(license.redeemerEmail, "", "");
+
+          const url = `${process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com"}/service/v0/workspace/add`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", token },
+            body: JSON.stringify({
+              _id: license.heimdallWorkspaceId,
+              type: "FREEMIUM",
+              license_code: null,
+              license_provider: null,
+              plan_id: null,
+            }),
+          });
+
+          const data = (await res.json()) as Record<string, unknown>;
+          console.log("[Webhook:deactivate] Heimdall response:", JSON.stringify(data).slice(0, 300));
+
+          if (data.status === "success") {
+            console.log("[Webhook:deactivate] Workspace moved to free plan SUCCESS");
+          } else {
+            console.error("[Webhook:deactivate] Heimdall returned status:failed:", JSON.stringify(data));
+          }
+        } else {
+          console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping");
+        }
+      } catch (err) {
+        console.error("[Webhook:deactivate] Heimdall free plan sync FAILED (non-blocking):", err);
+      }
+
       return res.json({ event: "deactivate", success: true });
     }
 
