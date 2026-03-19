@@ -101,6 +101,9 @@ export const partnerLicenseKeys = pgTable(
     previousKey: text("previous_key"),
     batchId: text("batch_id"),
     notes: text("notes"),
+    heimdallUserId: text("heimdall_user_id"),
+    heimdallWorkspaceId: text("heimdall_workspace_id"),
+    redeemerEmail: varchar("redeemer_email", { length: 255 }),
   },
   (table) => [
     index("idx_license_keys_partner_id").on(table.partnerId),
@@ -236,7 +239,7 @@ export const loginSchema = z.object({
 });
 
 export const generateLicensesSchema = z.object({
-  tier: z.number().int().min(1).max(3),
+  tier: z.number().int().min(1).max(4),
   quantity: z.number().int().min(1).max(10000),
   notes: z.string().optional(),
 });
@@ -245,6 +248,12 @@ export const createPartnerFormSchema = z.object({
   name: z.string().min(1).max(255),
   displayName: z.string().min(1).max(255),
   contactEmail: z.string().email(),
+});
+
+export const redeemSignupSchema = z.object({
+  email: z.string().email("Please enter a valid email address"),
+  firstName: z.string().min(1, "First name is required").max(100),
+  lastName: z.string().min(1, "Last name is required").max(100),
 });
 
 export const createPartnerUserFormSchema = z.object({

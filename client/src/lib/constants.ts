@@ -11,6 +11,7 @@ export const TIER_LABELS: Record<number, string> = {
   1: "Tier 1",
   2: "Tier 2",
   3: "Tier 3",
+  4: "Tier 4",
 };
 
 export const STATUS_COLORS: Record<string, string> = {

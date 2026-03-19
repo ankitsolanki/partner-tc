@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { validateHmacSignature } from "../utils/crypto";
 import { storage } from "../storage";
+import { updateWorkspacePlanViaService } from "../services/heimdall";
 import { z } from "zod";
 
 const router = Router();
@@ -94,6 +95,22 @@ router.post("/partner", async (req, res) => {
         payload.new_tier,
         webhookData
       );
+
+      // Sync plan change to Heimdall
+      try {
+        const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+        if (prevLicense?.heimdallWorkspaceId) {
+          await updateWorkspacePlanViaService(
+            prevLicense.heimdallWorkspaceId,
+            payload.new_tier,
+            payload.new_license_key
+          );
+          console.log("[Webhook] Upgraded Heimdall plan for workspace:", prevLicense.heimdallWorkspaceId);
+        }
+      } catch (err) {
+        console.error("[Webhook] Failed to sync upgrade to Heimdall:", err);
+      }
+
       return res.json({ event: "upgrade", success: true });
     }
 
@@ -110,6 +127,22 @@ router.post("/partner", async (req, res) => {
         payload.new_tier,
         webhookData
       );
+
+      // Sync plan change to Heimdall
+      try {
+        const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+        if (prevLicense?.heimdallWorkspaceId) {
+          await updateWorkspacePlanViaService(
+            prevLicense.heimdallWorkspaceId,
+            payload.new_tier,
+            payload.new_license_key
+          );
+          console.log("[Webhook] Downgraded Heimdall plan for workspace:", prevLicense.heimdallWorkspaceId);
+        }
+      } catch (err) {
+        console.error("[Webhook] Failed to sync downgrade to Heimdall:", err);
+      }
+
       return res.json({ event: "downgrade", success: true });
     }
 

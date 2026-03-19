@@ -507,6 +507,9 @@ export class DatabaseStorage implements IStorage {
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
+        heimdallUserId: existingPrevious?.heimdallUserId,
+        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+        redeemerEmail: existingPrevious?.redeemerEmail,
       });
       return updated!;
     }
@@ -521,6 +524,9 @@ export class DatabaseStorage implements IStorage {
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
+        heimdallUserId: existingPrevious?.heimdallUserId,
+        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+        redeemerEmail: existingPrevious?.redeemerEmail,
       })
       .returning();
 
@@ -556,6 +562,9 @@ export class DatabaseStorage implements IStorage {
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
+        heimdallUserId: existingPrevious?.heimdallUserId,
+        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+        redeemerEmail: existingPrevious?.redeemerEmail,
       });
       return updated!;
     }
@@ -570,6 +579,9 @@ export class DatabaseStorage implements IStorage {
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
+        heimdallUserId: existingPrevious?.heimdallUserId,
+        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+        redeemerEmail: existingPrevious?.redeemerEmail,
       })
       .returning();
 

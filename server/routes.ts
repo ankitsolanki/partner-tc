@@ -6,6 +6,7 @@ import partnerRoutes from "./routes/partner";
 import adminRoutes from "./routes/admin";
 import webhookRoutes from "./routes/webhook";
 import oauthRoutes from "./routes/oauth";
+import provisioningRoutes from "./routes/provisioning";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -17,6 +18,7 @@ export async function registerRoutes(
   app.use("/api/admin", adminRoutes);
   app.use("/api/webhooks", webhookRoutes);
   app.use("/api/auth", oauthRoutes);
+  app.use("/api/redeem", provisioningRoutes);
 
   await seedDatabase();
 

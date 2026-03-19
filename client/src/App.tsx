@@ -16,6 +16,7 @@ import AdminPartners from "@/pages/admin/partners";
 import AdminPartnerDetail from "@/pages/admin/partner-detail";
 import AdminGenerate from "@/pages/admin/generate";
 import AdminAppSumoIntegration from "@/pages/admin/appsumo-integration";
+import RedeemSignup from "@/pages/redeem-signup";
 import RedeemSuccess from "@/pages/redeem-success";
 
 function Router() {
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/admin/generate" component={AdminGenerate} />
       <Route path="/admin/appsumo" component={AdminAppSumoIntegration} />
 
+      <Route path="/redeem/signup" component={RedeemSignup} />
       <Route path="/redeem/success" component={RedeemSuccess} />
 
       <Route component={NotFound} />
