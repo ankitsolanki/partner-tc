@@ -7,7 +7,7 @@ import { z } from "zod";
 const router = Router();
 
 const webhookPayloadSchema = z.object({
-  event: z.enum(["purchase", "activate", "upgrade", "downgrade", "deactivate", "test"]),
+  event: z.enum(["purchase", "activate", "upgrade", "downgrade", "deactivate", "migrate", "test"]),
   license_key: z.string().optional(),
   prev_license_key: z.string().optional(),
   new_license_key: z.string().optional(),
@@ -19,6 +19,16 @@ const webhookPayloadSchema = z.object({
 });
 
 router.post("/partner", async (req, res) => {
+  console.log("[Webhook] ─── POST /api/webhooks/partner ───");
+  console.log("[Webhook] Full request body:", JSON.stringify(req.body));
+  console.log("[Webhook] Headers:", JSON.stringify({
+    "x-webhook-signature": req.headers["x-webhook-signature"] ? "present" : "missing",
+    "x-webhook-timestamp": req.headers["x-webhook-timestamp"],
+    "x-partner-name": req.headers["x-partner-name"],
+    "content-type": req.headers["content-type"],
+  }));
+  console.log("[Webhook] Query params:", JSON.stringify(req.query));
+
   const signature = req.headers["x-webhook-signature"] as string | undefined;
   const timestamp = req.headers["x-webhook-timestamp"] as string | undefined;
   const partnerNameQuery = req.query.name as string | undefined;
@@ -26,40 +36,53 @@ router.post("/partner", async (req, res) => {
   const partnerName = partnerNameQuery ?? partnerNameHeader;
 
   if (!partnerName) {
+    console.log("[Webhook] REJECTED: No partner name provided");
     return res
       .status(400)
       .json({ message: "Missing partner name. Provide ?name=appsumo or x-partner-name header." });
   }
 
+  console.log("[Webhook] Partner name:", partnerName);
   const partner = await storage.getPartner(partnerName);
   if (!partner) {
+    console.log("[Webhook] REJECTED: Partner not found:", partnerName);
     return res.status(404).json({ message: "Partner not found" });
   }
+  console.log("[Webhook] Partner found:", { id: partner.id, name: partner.name, isActive: partner.isActive });
 
   if (!partner.isActive) {
+    console.log("[Webhook] REJECTED: Partner is inactive");
     return res.status(403).json({ message: "Partner is inactive" });
   }
 
   if (partner.webhookSecret && signature && timestamp) {
+    console.log("[Webhook] Validating HMAC signature...");
     const rawBody =
       typeof (req as any).rawBody === "object"
         ? Buffer.from((req as any).rawBody).toString("utf-8")
         : JSON.stringify(req.body);
 
     const isValid = validateHmacSignature(rawBody, timestamp, signature, partner.webhookSecret);
+    console.log("[Webhook] HMAC validation result:", isValid);
     if (!isValid) {
+      console.log("[Webhook] REJECTED: Invalid webhook signature");
       return res.status(401).json({ message: "Invalid webhook signature" });
     }
+  } else {
+    console.log("[Webhook] Skipping HMAC validation (no secret/signature)");
   }
 
   const parsed = webhookPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
+    console.log("[Webhook] REJECTED: Invalid payload:", JSON.stringify(parsed.error.flatten()));
     return res.status(400).json({ message: "Invalid payload", error: parsed.error.flatten() });
   }
 
   const payload = parsed.data;
+  console.log("[Webhook] Parsed event:", payload.event, "| license_key:", payload.license_key?.slice(0, 8), "| tier:", payload.tier);
 
   if (payload.event === "test" || payload.test) {
+    console.log("[Webhook] Test event — acknowledging");
     return res.json({ event: "test", success: true });
   }
 
@@ -67,27 +90,38 @@ router.post("/partner", async (req, res) => {
 
   switch (payload.event) {
     case "purchase": {
+      console.log("[Webhook:purchase] ─── Processing purchase event ───");
       if (!payload.license_key || payload.tier === undefined) {
+        console.log("[Webhook:purchase] REJECTED: Missing license_key or tier");
         return res.status(400).json({ message: "license_key and tier required for purchase" });
       }
+      console.log("[Webhook:purchase] Key:", payload.license_key.slice(0, 8) + "...", "| Tier:", payload.tier);
       await storage.handlePurchaseEvent(partner.id, payload.license_key, payload.tier, webhookData);
+      console.log("[Webhook:purchase] SUCCESS — license stored in DB");
       return res.json({ event: "purchase", success: true });
     }
 
     case "activate": {
+      console.log("[Webhook:activate] ─── Processing activate event ───");
       if (!payload.license_key) {
+        console.log("[Webhook:activate] REJECTED: Missing license_key");
         return res.status(400).json({ message: "license_key required for activate" });
       }
+      console.log("[Webhook:activate] Key:", payload.license_key.slice(0, 8) + "...");
       await storage.handleActivateEvent(partner.id, payload.license_key, webhookData);
+      console.log("[Webhook:activate] SUCCESS — license activated");
       return res.json({ event: "activate", success: true });
     }
 
     case "upgrade": {
+      console.log("[Webhook:upgrade] ─── Processing upgrade event ───");
       if (!payload.prev_license_key || !payload.new_license_key || payload.new_tier === undefined) {
+        console.log("[Webhook:upgrade] REJECTED: Missing prev_license_key, new_license_key, or new_tier");
         return res.status(400).json({
           message: "prev_license_key, new_license_key, and new_tier required for upgrade",
         });
       }
+      console.log("[Webhook:upgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", payload.new_license_key.slice(0, 8) + "...", "| New tier:", payload.new_tier);
       await storage.handleUpgradeEvent(
         partner.id,
         payload.prev_license_key,
@@ -95,31 +129,43 @@ router.post("/partner", async (req, res) => {
         payload.new_tier,
         webhookData
       );
+      console.log("[Webhook:upgrade] Local DB updated");
 
       // Sync plan change to Heimdall
       try {
         const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+        console.log("[Webhook:upgrade] Previous license Heimdall data:", {
+          heimdallWorkspaceId: prevLicense?.heimdallWorkspaceId,
+          heimdallUserId: prevLicense?.heimdallUserId,
+          redeemerEmail: prevLicense?.redeemerEmail,
+        });
         if (prevLicense?.heimdallWorkspaceId) {
+          console.log("[Webhook:upgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanViaService(
             prevLicense.heimdallWorkspaceId,
             payload.new_tier,
             payload.new_license_key
           );
-          console.log("[Webhook] Upgraded Heimdall plan for workspace:", prevLicense.heimdallWorkspaceId);
+          console.log("[Webhook:upgrade] Heimdall plan sync SUCCESS");
+        } else {
+          console.log("[Webhook:upgrade] No Heimdall workspace ID — skipping Heimdall sync");
         }
       } catch (err) {
-        console.error("[Webhook] Failed to sync upgrade to Heimdall:", err);
+        console.error("[Webhook:upgrade] Heimdall sync FAILED (non-blocking):", err);
       }
 
       return res.json({ event: "upgrade", success: true });
     }
 
     case "downgrade": {
+      console.log("[Webhook:downgrade] ─── Processing downgrade event ───");
       if (!payload.prev_license_key || !payload.new_license_key || payload.new_tier === undefined) {
+        console.log("[Webhook:downgrade] REJECTED: Missing prev_license_key, new_license_key, or new_tier");
         return res.status(400).json({
           message: "prev_license_key, new_license_key, and new_tier required for downgrade",
         });
       }
+      console.log("[Webhook:downgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", payload.new_license_key.slice(0, 8) + "...", "| New tier:", payload.new_tier);
       await storage.handleDowngradeEvent(
         partner.id,
         payload.prev_license_key,
@@ -127,34 +173,53 @@ router.post("/partner", async (req, res) => {
         payload.new_tier,
         webhookData
       );
+      console.log("[Webhook:downgrade] Local DB updated");
 
       // Sync plan change to Heimdall
       try {
         const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+        console.log("[Webhook:downgrade] Previous license Heimdall data:", {
+          heimdallWorkspaceId: prevLicense?.heimdallWorkspaceId,
+          heimdallUserId: prevLicense?.heimdallUserId,
+        });
         if (prevLicense?.heimdallWorkspaceId) {
+          console.log("[Webhook:downgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanViaService(
             prevLicense.heimdallWorkspaceId,
             payload.new_tier,
             payload.new_license_key
           );
-          console.log("[Webhook] Downgraded Heimdall plan for workspace:", prevLicense.heimdallWorkspaceId);
+          console.log("[Webhook:downgrade] Heimdall plan sync SUCCESS");
+        } else {
+          console.log("[Webhook:downgrade] No Heimdall workspace ID — skipping Heimdall sync");
         }
       } catch (err) {
-        console.error("[Webhook] Failed to sync downgrade to Heimdall:", err);
+        console.error("[Webhook:downgrade] Heimdall sync FAILED (non-blocking):", err);
       }
 
       return res.json({ event: "downgrade", success: true });
     }
 
     case "deactivate": {
+      console.log("[Webhook:deactivate] ─── Processing deactivate event ───");
       if (!payload.license_key) {
+        console.log("[Webhook:deactivate] REJECTED: Missing license_key");
         return res.status(400).json({ message: "license_key required for deactivate" });
       }
+      console.log("[Webhook:deactivate] Key:", payload.license_key.slice(0, 8) + "...");
       await storage.handleDeactivateEvent(partner.id, payload.license_key, webhookData);
+      console.log("[Webhook:deactivate] SUCCESS — license deactivated");
       return res.json({ event: "deactivate", success: true });
     }
 
+    case "migrate": {
+      console.log("[Webhook:migrate] ─── Processing migrate event ───");
+      console.log("[Webhook:migrate] Full payload:", JSON.stringify(webhookData));
+      return res.json({ event: "migrate", success: true });
+    }
+
     default:
+      console.log("[Webhook] REJECTED: Unknown event:", payload.event);
       return res.status(400).json({ message: `Unknown event: ${payload.event}` });
   }
 });

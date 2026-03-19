@@ -1,8 +1,9 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useEffect } from "react";
 import NotFound from "@/pages/not-found";
 import PartnerLogin from "@/pages/partner/login";
 import PartnerDashboard from "@/pages/partner/dashboard";
@@ -20,6 +21,14 @@ import RedeemSignup from "@/pages/redeem-signup";
 import RedeemSuccess from "@/pages/redeem-success";
 
 function Router() {
+  const [location] = useLocation();
+  useEffect(() => {
+    console.log("[App:Router] ─── Route changed ───");
+    console.log("[App:Router] Current location:", location);
+    console.log("[App:Router] Full URL:", window.location.href);
+    console.log("[App:Router] Search:", window.location.search);
+  }, [location]);
+
   return (
     <Switch>
       <Route path="/">

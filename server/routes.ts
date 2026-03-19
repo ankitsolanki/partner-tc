@@ -12,15 +12,28 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  console.log("[Routes] Registering routes...");
+
   setupSession(app);
 
   app.use("/api/partner", partnerRoutes);
-  app.use("/api/admin", adminRoutes);
-  app.use("/api/webhooks", webhookRoutes);
-  app.use("/api/auth", oauthRoutes);
-  app.use("/api/redeem", provisioningRoutes);
+  console.log("[Routes]   /api/partner → partnerRoutes");
 
+  app.use("/api/admin", adminRoutes);
+  console.log("[Routes]   /api/admin → adminRoutes");
+
+  app.use("/api/webhooks", webhookRoutes);
+  console.log("[Routes]   /api/webhooks → webhookRoutes");
+
+  app.use("/api/auth", oauthRoutes);
+  console.log("[Routes]   /api/auth → oauthRoutes (AppSumo only, NO Keycloak)");
+
+  app.use("/api/redeem", provisioningRoutes);
+  console.log("[Routes]   /api/redeem → provisioningRoutes (NEW)");
+
+  console.log("[Routes] All routes registered. Seeding database...");
   await seedDatabase();
+  console.log("[Routes] Database seeded.");
 
   return httpServer;
 }

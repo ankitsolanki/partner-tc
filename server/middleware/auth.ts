@@ -15,6 +15,11 @@ declare module "express-session" {
 }
 
 export function setupSession(app: Express): void {
+  console.log("[Session] Setting up session middleware...");
+  console.log("[Session] Cookie secure:", process.env.NODE_ENV === "production");
+  console.log("[Session] Cookie sameSite: lax");
+  console.log("[Session] Cookie maxAge: 24h");
+
   const PgStore = connectPgSimple(session);
 
   app.use(
@@ -35,6 +40,8 @@ export function setupSession(app: Express): void {
       },
     })
   );
+
+  console.log("[Session] Session middleware configured");
 }
 
 export function requirePartnerAuth(
@@ -43,6 +50,12 @@ export function requirePartnerAuth(
   next: NextFunction
 ): void {
   if (!req.session.partnerUserId || !req.session.partnerId) {
+    console.log("[Auth] Partner auth REJECTED:", {
+      path: req.path,
+      sessionId: req.session?.id,
+      partnerUserId: req.session?.partnerUserId,
+      partnerId: req.session?.partnerId,
+    });
     res.status(401).json({ message: "Authentication required" });
     return;
   }
@@ -55,6 +68,12 @@ export function requireAdminAuth(
   next: NextFunction
 ): void {
   if (!req.session.partnerUserId || !req.session.isAdmin) {
+    console.log("[Auth] Admin auth REJECTED:", {
+      path: req.path,
+      sessionId: req.session?.id,
+      partnerUserId: req.session?.partnerUserId,
+      isAdmin: req.session?.isAdmin,
+    });
     res.status(401).json({ message: "Admin authentication required" });
     return;
   }

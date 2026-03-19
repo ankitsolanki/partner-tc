@@ -41,10 +41,22 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+// ─── Global request logger (enhanced) ─────────────────────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
+
+  // Log EVERY incoming request (not just /api)
+  if (path.startsWith("/api") || path.startsWith("/redeem")) {
+    console.log(`[REQ] ──► ${req.method} ${path} from ${req.ip} | Host: ${req.headers.host} | Referer: ${req.headers.referer || "none"}`);
+    if (req.method === "POST" && path.startsWith("/api")) {
+      console.log(`[REQ]     Body keys: ${Object.keys(req.body || {}).join(", ") || "(empty)"}`);
+    }
+    if (req.session) {
+      console.log(`[REQ]     Session ID: ${req.session.id} | pendingLicenseKey: ${req.session.pendingLicenseKey ? req.session.pendingLicenseKey.slice(0, 8) + "..." : "null"}`);
+    }
+  }
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
@@ -52,15 +64,22 @@ app.use((req, res, next) => {
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
+  // Capture redirects
+  const originalRedirect = res.redirect;
+  res.redirect = function (this: Response, ...args: any[]) {
+    const url = typeof args[0] === "string" ? args[0] : args[1];
+    console.log(`[RES] ◄── ${req.method} ${path} → REDIRECT ${res.statusCode || 302} to: ${url}`);
+    return originalRedirect.apply(this, args as any);
+  };
+
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      let logLine = `[RES] ◄── ${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        logLine += ` :: ${JSON.stringify(capturedJsonResponse).slice(0, 300)}`;
       }
-
-      log(logLine);
+      console.log(logLine);
     }
   });
 
@@ -74,7 +93,7 @@ app.use((req, res, next) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    console.error("[ERROR] Internal Server Error:", err);
 
     if (res.headersSent) {
       return next(err);
@@ -111,6 +130,10 @@ app.use((req, res, next) => {
       console.log("  NODE_ENV:", process.env.NODE_ENV);
       console.log("  APP_BASE_URL:", process.env.APP_BASE_URL);
       console.log("  HEIMDALL_API_URL:", process.env.HEIMDALL_API_URL || "(default: https://heimdallapi.tinycommand.com)");
+      console.log("  DATABASE_URL:", (process.env.DATABASE_URL || "").replace(/:[^:@]+@/, ":***@"));
+      console.log("  SESSION_SECRET:", process.env.SESSION_SECRET ? "SET" : "MISSING");
+      console.log("  APPSUMO_CLIENT_ID:", process.env.APPSUMO_CLIENT_ID ? "SET" : "MISSING");
+      console.log("  APPSUMO_CLIENT_SECRET:", process.env.APPSUMO_CLIENT_SECRET ? "SET" : "MISSING");
       console.log("  KEYCLOAK flow: REMOVED (using Heimdall server-side provisioning)");
       console.log("  Build timestamp:", new Date().toISOString());
       console.log("════════════════════════════════════════════════════════════");

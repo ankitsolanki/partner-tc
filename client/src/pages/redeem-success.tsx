@@ -49,6 +49,12 @@ export default function RedeemSuccess() {
   const name = params.get("name");
   const email = params.get("email");
 
+  console.log("[RedeemSuccess] ─── Page loaded ───");
+  console.log("[RedeemSuccess] URL search:", searchStr);
+  console.log("[RedeemSuccess] Name:", name);
+  console.log("[RedeemSuccess] Email:", email);
+  console.log("[RedeemSuccess] Will redirect to:", REDIRECT_URL, "in", COUNTDOWN_SECS, "seconds");
+
   const [countdown, setCountdown] = useState(COUNTDOWN_SECS);
   const [confetti] = useState(() => buildConfetti(70));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
