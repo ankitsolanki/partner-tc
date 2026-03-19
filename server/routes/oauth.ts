@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { randomBytes } from "crypto";
+import { storage } from "../storage";
 
 const router = Router();
 
@@ -137,12 +138,27 @@ router.get("/partner/callback", async (req, res) => {
       return res.status(400).json({ message: "No license key returned by AppSumo" });
     }
 
-    // Step 3 — Store license key in session and redirect to signup page
+    // Step 3 — Ensure license key exists in local DB (handles race condition with purchase webhook)
+    const tier = (licenseData.tier as number) || 1;
+    const existing = await storage.getLicenseByKey(licenseKey);
+    if (!existing) {
+      console.log("[OAuth:callback] License key not in local DB — creating record. Tier:", tier);
+      const partner = await storage.getPartner("appsumo");
+      if (partner) {
+        await storage.handlePurchaseEvent(partner.id, licenseKey, tier, { source: "oauth-callback", license_data: licenseData });
+        console.log("[OAuth:callback] License record created in DB");
+      } else {
+        console.error("[OAuth:callback] AppSumo partner not found in DB — cannot create license record");
+      }
+    } else {
+      console.log("[OAuth:callback] License key already in DB. Status:", existing.status);
+    }
+
+    // Step 4 — Store license key in session and redirect to signup page
     req.session.pendingLicenseKey = licenseKey;
     console.log("[OAuth:callback] License stored in session:", licenseKey.slice(0, 8) + "...");
     console.log("[OAuth:callback] Session ID:", req.session.id);
     console.log("[OAuth:callback] ─── Redirecting to /redeem/signup (relative) ───");
-    console.log("[OAuth:callback] NOTE: This is a RELATIVE redirect — stays on same host");
 
     return res.redirect("/redeem/signup");
   } catch (err) {
