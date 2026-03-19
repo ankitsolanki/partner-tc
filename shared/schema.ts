@@ -104,6 +104,8 @@ export const partnerLicenseKeys = pgTable(
     heimdallUserId: text("heimdall_user_id"),
     heimdallWorkspaceId: text("heimdall_workspace_id"),
     redeemerEmail: varchar("redeemer_email", { length: 255 }),
+    previousPlanId: text("previous_plan_id"),
+    previousPlanType: text("previous_plan_type"),
   },
   (table) => [
     index("idx_license_keys_partner_id").on(table.partnerId),

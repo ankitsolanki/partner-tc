@@ -226,7 +226,9 @@ router.post("/partner", async (req, res) => {
           redeemerEmail: license?.redeemerEmail,
         });
         if (license?.heimdallWorkspaceId && license?.redeemerEmail) {
-          console.log("[Webhook:deactivate] Moving workspace to free plan on Heimdall...");
+          const restorePlanId = license.previousPlanId || null;
+          const restorePlanType = license.previousPlanType || "FREEMIUM";
+          console.log("[Webhook:deactivate] Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
           const { token } = await addHeimdallUser(license.redeemerEmail, "", "");
 
           const url = `${process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com"}/service/v0/workspace/add`;
@@ -235,10 +237,10 @@ router.post("/partner", async (req, res) => {
             headers: { "Content-Type": "application/json", token },
             body: JSON.stringify({
               _id: license.heimdallWorkspaceId,
-              type: "FREEMIUM",
+              type: restorePlanType,
+              plan_id: restorePlanId,
               license_code: null,
               license_provider: null,
-              plan_id: null,
             }),
           });
 

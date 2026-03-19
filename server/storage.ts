@@ -514,6 +514,8 @@ export class DatabaseStorage implements IStorage {
         heimdallUserId: existingPrevious?.heimdallUserId,
         heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
         redeemerEmail: existingPrevious?.redeemerEmail,
+        previousPlanId: existingPrevious?.previousPlanId,
+        previousPlanType: existingPrevious?.previousPlanType,
       });
       return updated!;
     }
@@ -531,6 +533,8 @@ export class DatabaseStorage implements IStorage {
         heimdallUserId: existingPrevious?.heimdallUserId,
         heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
         redeemerEmail: existingPrevious?.redeemerEmail,
+        previousPlanId: existingPrevious?.previousPlanId,
+        previousPlanType: existingPrevious?.previousPlanType,
       })
       .returning();
 
@@ -569,6 +573,8 @@ export class DatabaseStorage implements IStorage {
         heimdallUserId: existingPrevious?.heimdallUserId,
         heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
         redeemerEmail: existingPrevious?.redeemerEmail,
+        previousPlanId: existingPrevious?.previousPlanId,
+        previousPlanType: existingPrevious?.previousPlanType,
       });
       return updated!;
     }
@@ -586,6 +592,8 @@ export class DatabaseStorage implements IStorage {
         heimdallUserId: existingPrevious?.heimdallUserId,
         heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
         redeemerEmail: existingPrevious?.redeemerEmail,
+        previousPlanId: existingPrevious?.previousPlanId,
+        previousPlanType: existingPrevious?.previousPlanType,
       })
       .returning();
 

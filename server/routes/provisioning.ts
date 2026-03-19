@@ -142,7 +142,10 @@ router.post("/signup", async (req, res) => {
       heimdallUserId: result.heimdallUserId,
       heimdallWorkspaceId: result.heimdallWorkspaceId,
       redeemerEmail: email,
+      previousPlanId: result.previousPlanId,
+      previousPlanType: result.previousPlanType,
     });
+    console.log("[Redeem:signup] Saved previous plan info:", { previousPlanId: result.previousPlanId, previousPlanType: result.previousPlanType });
     console.log("[Redeem:signup] License status updated");
 
     // 7. Log the event

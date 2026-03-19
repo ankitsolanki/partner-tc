@@ -29,6 +29,8 @@ export interface ProvisioningResult {
   heimdallUserId: string;
   heimdallWorkspaceId: string;
   isNewUser: boolean;
+  previousPlanId: string | null;
+  previousPlanType: string | null;
 }
 
 // ─── Step 1: Register user on Keycloak ────────────────────────────────────────
@@ -114,12 +116,15 @@ export async function addHeimdallUser(
   console.log("[Heimdall:2-addUser] ─── Adding user to Heimdall MongoDB ───");
   console.log("[Heimdall:2-addUser] URL:", url);
 
-  const requestBody = {
+  const requestBody: Record<string, string> = {
     email_id: email,
-    name: `${firstName} ${lastName}`,
-    first_name: firstName,
-    last_name: lastName,
   };
+  // Only send name fields if provided — avoids overwriting existing user data
+  if (firstName || lastName) {
+    requestBody.name = `${firstName} ${lastName}`.trim();
+    requestBody.first_name = firstName;
+    requestBody.last_name = lastName;
+  }
   console.log("[Heimdall:2-addUser] Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
@@ -166,10 +171,16 @@ export async function addHeimdallUser(
 }
 
 // ─── Step 3: Find root workspace ──────────────────────────────────────────────
+interface WorkspaceInfo {
+  workspaceId: string;
+  planId: string | null;
+  planType: string | null;
+}
+
 async function findRootWorkspace(
   ownerId: string,
   token: string
-): Promise<string | null> {
+): Promise<WorkspaceInfo | null> {
   const params = new URLSearchParams({ owner_id: ownerId, return_root: "true" });
   const url = `${HEIMDALL_BASE}/service/v0/workspace/find/one?${params.toString()}`;
 
@@ -199,7 +210,15 @@ async function findRootWorkspace(
   const data = (await res.json()) as Record<string, unknown>;
   const result = data.result as Record<string, unknown> | undefined;
   console.log("[Heimdall:3-findWorkspace] Response keys:", Object.keys(data));
-  console.log("[Heimdall:3-findWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
+  console.log("[Heimdall:3-findWorkspace] Full response:", JSON.stringify(data).slice(0, 800));
+  if (result) {
+    console.log("[Heimdall:3-findWorkspace] *** WORKSPACE PLAN STATE ***");
+    console.log("[Heimdall:3-findWorkspace]   plan_id:", result.plan_id ?? "NULL");
+    console.log("[Heimdall:3-findWorkspace]   type:", result.type ?? "NULL");
+    console.log("[Heimdall:3-findWorkspace]   license_code:", result.license_code ?? "NULL");
+    console.log("[Heimdall:3-findWorkspace]   license_provider:", result.license_provider ?? "NULL");
+    console.log("[Heimdall:3-findWorkspace] *** END PLAN STATE ***");
+  }
 
   // Heimdall returns 200 with status:"failed" when no workspace found
   if (data.status === "failed") {
@@ -214,8 +233,10 @@ async function findRootWorkspace(
     return null;
   }
 
-  console.log("[Heimdall:3-findWorkspace] SUCCESS — found workspace:", workspaceId);
-  return workspaceId;
+  const planId = (result?.plan_id as string) || null;
+  const planType = (result?.type as string) || null;
+  console.log("[Heimdall:3-findWorkspace] SUCCESS — found workspace:", workspaceId, "| current plan_id:", planId, "| type:", planType);
+  return { workspaceId, planId, planType };
 }
 
 // ─── Step 4: Add workspace with plan ──────────────────────────────────────────
@@ -448,10 +469,12 @@ export async function provisionAccount(
   const { token, userId } = await addHeimdallUser(email, firstName, lastName);
   console.log("[Heimdall:provision] <<< Step 2 done. userId:", userId);
 
-  // Step 3: Find existing root workspace
+  // Step 3: Find existing root workspace and capture current plan
   console.log("[Heimdall:provision] >>> Step 3/5: Find root workspace");
-  const existingWorkspaceId = await findRootWorkspace(userId, token);
-  console.log("[Heimdall:provision] <<< Step 3 done. existingWorkspaceId:", existingWorkspaceId ?? "NONE");
+  const existingWorkspace = await findRootWorkspace(userId, token);
+  const previousPlanId = existingWorkspace?.planId ?? null;
+  const previousPlanType = existingWorkspace?.planType ?? null;
+  console.log("[Heimdall:provision] <<< Step 3 done. workspace:", existingWorkspace?.workspaceId ?? "NONE", "| previousPlan:", previousPlanId, previousPlanType);
 
   // Step 4: Add/update workspace with plan
   console.log("[Heimdall:provision] >>> Step 4/5: Add workspace/plan");
@@ -461,7 +484,7 @@ export async function provisionAccount(
   console.log("[Heimdall:provision] Workspace name:", workspaceName);
 
   const workspaceId = await addWorkspacePlan(token, {
-    workspaceId: existingWorkspaceId,
+    workspaceId: existingWorkspace?.workspaceId ?? null,
     ownerId: userId,
     workspaceName,
     licenseKey,
@@ -484,5 +507,7 @@ export async function provisionAccount(
     heimdallUserId: userId,
     heimdallWorkspaceId: workspaceId,
     isNewUser: !alreadyExisted,
+    previousPlanId,
+    previousPlanType,
   };
 }
