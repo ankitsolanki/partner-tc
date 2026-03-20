@@ -1,8 +1,7 @@
 import { Router } from "express";
 import { redeemSignupSchema, LICENSE_STATUS } from "@shared/schema";
 import { storage } from "../storage";
-import { provisionAccount, HeimdallError, PLAN_ID_MAP } from "../services/heimdall";
-import { changePlanForWorkspace } from "../services/track";
+import { provisionAccount, HeimdallError } from "../services/heimdall";
 
 const router = Router();
 
@@ -166,18 +165,7 @@ router.post("/signup", async (req, res) => {
     delete req.session.pendingLicenseKey;
     console.log("[Redeem:signup] Cleared pendingLicenseKey from session");
 
-    // 9. Change tiny-track subscription to the AppSumo plan (non-blocking).
-    // Heimdall's queue creates a customer with the default plan in tiny-track.
-    // We change it to the correct AppSumo tier plan with retries (queue is async).
-    const trackPlanId = PLAN_ID_MAP[license.tier];
-    if (trackPlanId && result.heimdallWorkspaceId) {
-      console.log("[Redeem:signup] Scheduling tiny-track plan change (non-blocking)...");
-      changePlanForWorkspace(result.heimdallWorkspaceId, trackPlanId, license.tier)
-        .then(() => console.log("[Redeem:signup] Tiny-track plan change completed for workspace:", result.heimdallWorkspaceId))
-        .catch((err) => console.error("[Redeem:signup] Tiny-track plan change FAILED (non-blocking):", err));
-    }
-
-    // 10. Return success
+    // 9. Return success
     console.log("[Redeem:signup] ─── SUCCESS ─── Returning result");
     return res.json({
       success: true,

@@ -269,13 +269,11 @@ async function addWorkspacePlan(
   console.log("[Heimdall:4-addWorkspace] URL:", url);
   console.log("[Heimdall:4-addWorkspace] Mode:", params.workspaceId ? "UPDATE existing" : "CREATE new");
 
-  // Only send plan_id and type — do NOT send license_code/license_provider.
-  // Heimdall passes those to tiny-track's upsert_track_customer queue job,
-  // causing handleLicenseAndSubscription() to create a duplicate subscription.
-  // The correct AppSumo plan is set on tiny-track separately via change-plan API.
   const body: Record<string, unknown> = {
     owner_id: params.ownerId,
     name: params.workspaceName,
+    license_code: params.licenseKey,
+    license_provider: "appsumo",
     plan_id: params.planId,
     type: params.planType,
   };
@@ -480,6 +478,8 @@ export async function updateWorkspacePlanForUser(
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
   const requestBody = {
     _id: workspaceId,
+    license_code: licenseKey,
+    license_provider: "appsumo",
     plan_id: planId,
     type: planType,
   };
@@ -538,15 +538,24 @@ export async function provisionAccount(
   }
   console.log("[Heimdall:provision] Plan mapping:", { planId, planType });
 
+  const STEP_DELAY_MS = 10_000;
+  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+
   // Step 1: Register on Keycloak (using user-provided password)
   console.log("[Heimdall:provision] >>> Step 1/5: Register on Keycloak");
   const { alreadyExisted } = await registerKeycloakUser(email, firstName, lastName, password);
   console.log("[Heimdall:provision] <<< Step 1 done. alreadyExisted:", alreadyExisted);
 
+  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 2...");
+  await delay(STEP_DELAY_MS);
+
   // Step 2: Add/upsert in Heimdall MongoDB
   console.log("[Heimdall:provision] >>> Step 2/5: Add user to Heimdall");
   const { token, userId } = await addHeimdallUser(email, firstName, lastName);
   console.log("[Heimdall:provision] <<< Step 2 done. userId:", userId);
+
+  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 3...");
+  await delay(STEP_DELAY_MS);
 
   // Step 3: Find existing root workspace and capture current plan
   console.log("[Heimdall:provision] >>> Step 3/5: Find root workspace");
@@ -554,6 +563,9 @@ export async function provisionAccount(
   const previousPlanId = existingWorkspace?.planId ?? null;
   const previousPlanType = existingWorkspace?.planType ?? null;
   console.log("[Heimdall:provision] <<< Step 3 done. workspace:", existingWorkspace?.workspaceId ?? "NONE", "| previousPlan:", previousPlanId, previousPlanType);
+
+  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 4...");
+  await delay(STEP_DELAY_MS);
 
   // Step 4: Add/update workspace with plan
   console.log("[Heimdall:provision] >>> Step 4/5: Add workspace/plan");
@@ -571,6 +583,9 @@ export async function provisionAccount(
     planType,
   });
   console.log("[Heimdall:provision] <<< Step 4 done. workspaceId:", workspaceId);
+
+  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 5...");
+  await delay(STEP_DELAY_MS);
 
   // Step 5: No longer needed — user provides their own password in the signup form
   console.log("[Heimdall:provision] >>> Step 5/5: SKIPPED (user set password in signup form)");
