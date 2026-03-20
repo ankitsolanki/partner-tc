@@ -1,0 +1,348 @@
+Test Case ID,Category,Test Case Name,Priority,Preconditions,Steps,Expected Result
+TC-001,Partner Auth,Partner login with valid credentials,Critical,"Partner user exists in DB (e.g. partner@appsumo.com / partner123)","1. Navigate to /partner/login
+2. Enter email: partner@appsumo.com
+3. Enter password: partner123
+4. Click Login","User is redirected to /partner/dashboard. Session is created. Dashboard shows partner stats (generated, consumed, redeemed, available counts)."
+TC-002,Partner Auth,Partner login with invalid password,Critical,"Partner user exists in DB","1. Navigate to /partner/login
+2. Enter email: partner@appsumo.com
+3. Enter password: wrongpassword
+4. Click Login","Login fails with 'Invalid credentials' error message. User stays on login page. No session is created."
+TC-003,Partner Auth,Partner login with non-existent email,High,"No user with this email","1. Navigate to /partner/login
+2. Enter email: doesnotexist@test.com
+3. Enter password: anything
+4. Click Login","Login fails with 'Invalid credentials' error message. No session is created."
+TC-004,Partner Auth,Partner login with inactive account,High,"Partner user exists but isActive=false","1. Navigate to /partner/login
+2. Enter email of inactive user
+3. Enter valid password
+4. Click Login","Login fails with 'Invalid credentials' error message."
+TC-005,Partner Auth,Partner logout,High,"Partner user is logged in","1. While logged in to partner portal
+2. Click Logout button","Session is destroyed. User is redirected to /partner/login. Attempting to access /partner/dashboard returns 401."
+TC-006,Partner Auth,Partner session persistence,Medium,"Partner user is logged in","1. Login to partner portal
+2. Close browser tab
+3. Open new tab and navigate to /partner/dashboard","User is still logged in and dashboard loads correctly (session persists via cookie)."
+TC-007,Partner Auth,Partner auth guard - unauthenticated access,High,"Not logged in","1. Open incognito/private window
+2. Navigate directly to /partner/dashboard","User is redirected to /partner/login or receives 401 unauthorized."
+TC-008,Admin Auth,Admin login with valid credentials,Critical,"Admin user exists (e.g. admin@tinycommand.com / admin123)","1. Navigate to /admin/login
+2. Enter email: admin@tinycommand.com
+3. Enter password: admin123
+4. Click Login","User is redirected to /admin/dashboard. Session is created with isAdmin=true."
+TC-009,Admin Auth,Admin login - partner user cannot access admin,High,"Non-admin partner user exists (partner@appsumo.com)","1. Navigate to /admin/login
+2. Enter email: partner@appsumo.com
+3. Enter password: partner123
+4. Click Login","Login fails with 'Invalid credentials'. Partner users without isAdmin=true cannot access admin portal."
+TC-010,Admin Auth,Admin auth guard - unauthenticated access,High,"Not logged in","1. Open incognito window
+2. Navigate directly to /admin/dashboard","User is redirected to /admin/login or receives 401 unauthorized."
+TC-011,License Generation,Partner generates Tier 1 licenses,Critical,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 1
+3. Enter Quantity: 10
+4. Optionally enter Notes: 'Test batch'
+5. Click Generate","10 new license keys are created with status 'generated' and tier 1. A new batch record is created. Success message is shown with batch details. Keys appear in /partner/licenses."
+TC-012,License Generation,Partner generates Tier 2 licenses,High,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 2
+3. Enter Quantity: 5
+4. Click Generate","5 new license keys created with tier 2, status 'generated'. Batch record created."
+TC-013,License Generation,Partner generates Tier 3 licenses,High,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 3
+3. Enter Quantity: 5
+4. Click Generate","5 new license keys created with tier 3, status 'generated'. Batch record created."
+TC-014,License Generation,Partner generates Tier 4 licenses,High,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 4
+3. Enter Quantity: 5
+4. Click Generate","5 new license keys created with tier 4, status 'generated'. Batch record created."
+TC-015,License Generation,Generate max quantity (10000),Medium,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 1
+3. Enter Quantity: 10000
+4. Click Generate","10000 keys are created successfully. May take longer but should complete without timeout."
+TC-016,License Generation,Generate with invalid quantity (0),Medium,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 1
+3. Enter Quantity: 0
+4. Click Generate","Validation error: quantity must be at least 1. No keys created."
+TC-017,License Generation,Generate with invalid quantity (> 10000),Medium,"Logged in as partner user","1. Navigate to /partner/generate
+2. Select Tier: 1
+3. Enter Quantity: 10001
+4. Click Generate","Validation error: quantity must be at most 10000. No keys created."
+TC-018,License Generation,Generate with invalid tier (5),Medium,"Logged in as partner user","1. Navigate to /partner/generate
+2. Attempt to select Tier: 5
+3. Click Generate","Validation error: tier must be between 1 and 4. No keys created."
+TC-019,License Generation,Admin generates licenses for a partner,High,"Logged in as admin. At least one partner exists.","1. Navigate to /admin/generate or /admin/partners/:id
+2. Select partner
+3. Select Tier: 2
+4. Enter Quantity: 10
+5. Click Generate","10 keys created for the selected partner with tier 2. Batch record shows generatedByType='admin'. Keys visible in both admin and partner views."
+TC-020,License List,View partner licenses list,High,"Logged in as partner. Licenses exist.","1. Navigate to /partner/licenses","All licenses for this partner are displayed in a paginated table showing license key, tier, status, and dates. Default shows 50 per page."
+TC-021,License List,Filter licenses by status,High,"Logged in as partner. Licenses with various statuses exist.","1. Navigate to /partner/licenses
+2. Select Status filter: 'redeemed'","Only licenses with status 'redeemed' are shown. Count updates to reflect filtered total."
+TC-022,License List,Filter licenses by tier,High,"Logged in as partner. Licenses with various tiers exist.","1. Navigate to /partner/licenses
+2. Select Tier filter: 2","Only tier 2 licenses are shown."
+TC-023,License List,Search licenses by key,Medium,"Logged in as partner. Licenses exist.","1. Navigate to /partner/licenses
+2. Enter first 8 characters of a known license key in search box","Only matching licenses are shown (ILIKE search on license key)."
+TC-024,License List,Pagination,Medium,"Logged in as partner. More than 50 licenses exist.","1. Navigate to /partner/licenses
+2. Scroll to bottom
+3. Click next page","Second page of results loads. Different licenses are shown."
+TC-025,License Detail,View license detail and event history,High,"Logged in as partner. A license with events exists.","1. Navigate to /partner/licenses
+2. Click on a license key","License detail page shows: license key, tier, current status, all timestamps (generated, consumed, redeemed, etc.), Heimdall IDs, redeemer email. Event history shows chronological list of all events."
+TC-026,License Export,Export all licenses as CSV,Medium,"Logged in as partner. Licenses exist.","1. Navigate to /partner/licenses
+2. Click Export CSV","CSV file downloads containing all partner licenses with columns for key, tier, status, dates."
+TC-027,License Export,Export batch as CSV,Medium,"Logged in as partner. A batch exists.","1. Navigate to /partner/licenses or batches view
+2. Find a batch
+3. Click Export Batch","CSV downloads with only that batch's licenses. Batch is marked as exported with exportedAt timestamp."
+TC-028,Partner Dashboard,Dashboard stats accuracy,High,"Logged in as partner. Mix of license statuses exist.","1. Navigate to /partner/dashboard
+2. Compare displayed stats with actual DB counts","Stats cards show correct counts: Total Generated (status=generated), Total Consumed, Total Redeemed, Total Available (same as generated), Total Deactivated, Total Upgraded, Total Downgraded. Recent events list shows latest events."
+TC-029,Partner Reports,Conversion funnel accuracy,Medium,"Logged in as partner. Licenses in various statuses.","1. Navigate to /partner/reports
+2. Review conversion funnel","Funnel shows: Generated (all licenses), Consumed (consumed + redeemed + upgraded + downgraded + deactivated), Redeemed (redeemed + upgraded + downgraded + deactivated). Conversion and redemption rates are calculated correctly as percentages."
+TC-030,Partner Reports,Tier distribution chart,Medium,"Logged in as partner. Licenses across multiple tiers.","1. Navigate to /partner/reports
+2. Review tier distribution","Chart shows correct count per tier, with breakdown of total vs available for each tier."
+TC-031,Partner Reports,Daily activity chart,Medium,"Logged in as partner. Events exist over the past 30 days.","1. Navigate to /partner/reports
+2. Review daily activity chart","Chart shows event counts grouped by day and event type for the last 30 days."
+TC-032,Webhook - Purchase,Purchase event creates new license,Critical,"AppSumo partner exists and is active. License key does NOT exist in DB.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""purchase"", ""license_key"": ""<new-uuid>"", ""tier"": 1}
+3. Check DB","Response: 200 {event: 'purchase', success: true}. New license created in DB with status 'consumed', tier 1, consumedAt set. Event log entry created with eventType 'purchase', triggeredBy 'webhook'."
+TC-033,Webhook - Purchase,Purchase event on existing license,High,"License key already exists in DB with status 'generated'.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""purchase"", ""license_key"": ""<existing-key>"", ""tier"": 1}","Response: 200. Existing license status updated to 'consumed'. consumedAt set. Event log entry created showing previousStatus 'generated' -> newStatus 'consumed'."
+TC-034,Webhook - Purchase,Purchase event missing license_key,High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""purchase"", ""tier"": 1}","Response: 400 {message: 'license_key and tier required for purchase'}. No DB changes."
+TC-035,Webhook - Purchase,Purchase event missing tier,High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""purchase"", ""license_key"": ""<uuid>""}","Response: 400 {message: 'license_key and tier required for purchase'}. No DB changes."
+TC-036,Webhook - Activate,Activate event on existing license,Critical,"License exists in DB with status 'generated' or 'consumed'.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""activate"", ""license_key"": ""<existing-key>""}","Response: 200. License status set to 'consumed'. consumedAt set. Event log entry created with eventType 'activate'."
+TC-037,Webhook - Activate,Activate event on non-existing license (race condition fix),Critical,"License key does NOT exist in DB (purchase webhook hasn't arrived yet).","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""activate"", ""license_key"": ""<new-uuid>"", ""tier"": 2}
+3. Check DB","Response: 200. NEW license record created in DB with status 'consumed', tier from payload (or default 1). Event log created. License is NOT lost."
+TC-038,Webhook - Activate,Activate event missing license_key,High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""activate""}","Response: 400 {message: 'license_key required for activate'}."
+TC-039,Webhook - Upgrade,Upgrade: full flow with Heimdall sync,Critical,"Previous license KEY-1 exists with status 'redeemed', heimdallWorkspaceId, heimdallUserId, and redeemerEmail populated (user completed signup). Heimdall API is accessible.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<KEY-1>"", ""license_key"": ""<KEY-2-new-uuid>"", ""tier"": 2}
+3. Check DB for both keys
+4. Check Heimdall workspace plan","Response: 200 {event: 'upgrade', success: true, heimdallSynced: true}.
+DB: KEY-1 status='upgraded', upgradedAt set, upgradedToKey=KEY-2.
+DB: KEY-2 created with status='redeemed', tier=2, heimdallUserId/heimdallWorkspaceId/redeemerEmail/previousPlanId/previousPlanType all copied from KEY-1. previousKey=KEY-1.
+Events: TWO events created - one for KEY-1 (upgraded) and one for KEY-2 (redeemed).
+Heimdall: Workspace plan updated to appsumo_tier_2 with correct plan_id, license_code=KEY-2."
+TC-040,Webhook - Upgrade,Upgrade: previous key not redeemed (no Heimdall data),High,"Previous license KEY-1 exists with status 'consumed' but NO heimdallWorkspaceId or redeemerEmail (user hasn't completed signup yet).","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<KEY-1>"", ""license_key"": ""<KEY-2>"", ""tier"": 2}
+3. Check DB
+4. Check server logs","Response: 200 {event: 'upgrade', success: true, heimdallSynced: true}.
+DB: KEY-1 marked 'upgraded'. KEY-2 created with tier 2, status 'redeemed', but Heimdall fields are null.
+Logs: 'No Heimdall workspace or redeemer email on previous key — skipping sync'.
+Heimdall: NOT called (nothing to sync)."
+TC-041,Webhook - Upgrade,Upgrade: previous key does not exist in DB,High,"Previous license key does NOT exist in DB at all.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<nonexistent>"", ""license_key"": ""<KEY-2>"", ""tier"": 3}
+3. Check DB","Response: 200. KEY-1 not found so not updated. Event still created for KEY-1 with previousStatus=null. KEY-2 created with tier 3, status 'redeemed', but all Heimdall fields null. Heimdall sync skipped."
+TC-042,Webhook - Upgrade,Upgrade: new key already exists from prior purchase,High,"KEY-2 already exists in DB (created via prior purchase webhook) with tier=2, status='consumed'.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<KEY-1>"", ""license_key"": ""<KEY-2>"", ""tier"": 3}
+3. Check DB","KEY-2 is UPDATED (not inserted): status='redeemed', tier updated to 3 (new tier), Heimdall data copied from KEY-1. Event created for both keys."
+TC-043,Webhook - Upgrade,Upgrade: Heimdall sync failure returns 500,Critical,"Previous license has Heimdall data. Heimdall API is DOWN or unreachable.","1. Temporarily make Heimdall unreachable (e.g. set HEIMDALL_API_URL to invalid URL)
+2. Send upgrade webhook
+3. Check response
+4. Check DB
+5. Check server logs","Response: 500 {event: 'upgrade', success: false, message: 'Local DB updated but Heimdall plan sync failed — please retry'}.
+DB: Local DB IS updated (old key upgraded, new key created).
+Logs: Error details logged.
+AppSumo: Will retry the webhook. On retry with Heimdall restored, the handler should process idempotently."
+TC-044,Webhook - Upgrade,Upgrade: missing prev_license_key,High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""license_key"": ""<KEY-2>"", ""tier"": 2}","Response: 400 {message: 'prev_license_key, license_key, and tier required for upgrade'}. No DB changes."
+TC-045,Webhook - Upgrade,Upgrade: missing license_key (new key),High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<KEY-1>"", ""tier"": 2}","Response: 400. No DB changes."
+TC-046,Webhook - Upgrade,Upgrade: missing tier,High,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""upgrade"", ""prev_license_key"": ""<KEY-1>"", ""license_key"": ""<KEY-2>""}","Response: 400. No DB changes."
+TC-047,Webhook - Upgrade,Upgrade: sequential tier 1→2→3,Critical,"KEY-1 redeemed at tier 1 with Heimdall data. Heimdall accessible.","1. Send upgrade webhook: KEY-1→KEY-2, tier 2
+2. Verify KEY-2 has Heimdall data and Heimdall plan is tier 2
+3. Send upgrade webhook: KEY-2→KEY-3, tier 3
+4. Verify KEY-3 has Heimdall data and Heimdall plan is tier 3","After step 2: KEY-1 status='upgraded', KEY-2 status='redeemed' with tier 2, Heimdall workspace on appsumo_tier_2.
+After step 4: KEY-2 status='upgraded', KEY-3 status='redeemed' with tier 3, Heimdall workspace on appsumo_tier_3. All Heimdall fields (workspaceId, userId, email, previousPlan) properly chain-copied through each upgrade."
+TC-048,Webhook - Upgrade,Upgrade: verify Heimdall plan_id mapping,Critical,"Redeemed license at tier 1 with Heimdall data.","1. Send upgrade to tier 2: check Heimdall workspace plan_id = 82480e8b-8b70-4939-bf0f-6b50b069bb88, type = appsumo_tier_2
+2. Send upgrade to tier 3: check plan_id = d80c78c8-1634-4548-9eab-88daf6dc225c, type = appsumo_tier_3
+3. Send upgrade to tier 4: check plan_id = 737aaec7-380d-4279-8b49-16c651f10d17, type = appsumo_tier_4","Each tier maps to the correct Heimdall plan_id and type string. Workspace is actually updated (verify via Heimdall API or TinyCommand app)."
+TC-049,Webhook - Downgrade,Downgrade: full flow with Heimdall sync,Critical,"Previous license KEY-1 exists at tier 3 with status 'redeemed', heimdallWorkspaceId, heimdallUserId, and redeemerEmail populated. Heimdall accessible.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""downgrade"", ""prev_license_key"": ""<KEY-1>"", ""license_key"": ""<KEY-2-new>"", ""tier"": 1}
+3. Check DB for both keys
+4. Check Heimdall workspace plan","Response: 200 {event: 'downgrade', success: true, heimdallSynced: true}.
+DB: KEY-1 status='downgraded', downgradedAt set, upgradedToKey=KEY-2.
+DB: KEY-2 created with status='redeemed', tier=1, all Heimdall data copied from KEY-1.
+Events: TWO events - one for KEY-1 (downgraded) and one for KEY-2 (redeemed).
+Heimdall: Workspace plan updated to appsumo_tier_1."
+TC-050,Webhook - Downgrade,Downgrade: previous key not redeemed,High,"Previous license exists but with no Heimdall data.","1. Send downgrade webhook
+2. Check DB and logs","Response: 200. DB updated locally. Heimdall sync skipped with log message. No error."
+TC-051,Webhook - Downgrade,Downgrade: Heimdall sync failure returns 500,Critical,"Previous license has Heimdall data. Heimdall API is down.","1. Make Heimdall unreachable
+2. Send downgrade webhook
+3. Check response","Response: 500 {event: 'downgrade', success: false, message: 'Local DB updated but Heimdall plan sync failed — please retry'}. AppSumo should retry."
+TC-052,Webhook - Downgrade,Downgrade: sequential tier 3→2→1,Critical,"KEY-1 redeemed at tier 3 with Heimdall data.","1. Send downgrade webhook: KEY-1→KEY-2, tier 2
+2. Verify Heimdall plan is tier 2
+3. Send downgrade webhook: KEY-2→KEY-3, tier 1
+4. Verify Heimdall plan is tier 1","Each downgrade correctly updates both DB and Heimdall. Heimdall data chains through all keys. previousPlanId (the pre-AppSumo plan) is preserved across all downgrades."
+TC-053,Webhook - Downgrade,Downgrade: missing required fields,High,"Partner exists","1. Send downgrade without prev_license_key
+2. Send downgrade without license_key
+3. Send downgrade without tier","All three return 400 with appropriate error message. No DB changes."
+TC-054,Webhook - Upgrade then Downgrade,Upgrade tier 1→2 then downgrade 2→1,Critical,"KEY-1 redeemed at tier 1 with Heimdall data.","1. Send upgrade: KEY-1→KEY-2, tier 2
+2. Verify KEY-2 redeemed, Heimdall on tier 2
+3. Send downgrade: KEY-2→KEY-3, tier 1
+4. Verify KEY-3 redeemed, Heimdall on tier 1
+5. Check all three keys in DB","KEY-1: status='upgraded'. KEY-2: status='downgraded'. KEY-3: status='redeemed', tier=1. Heimdall workspace on appsumo_tier_1. All Heimdall fields chain-copied. previousPlanId preserved from original redemption."
+TC-055,Webhook - Deactivate,Deactivate: full flow with Heimdall restore to free,Critical,"License KEY-1 exists with status 'redeemed', has heimdallWorkspaceId and redeemerEmail. previousPlanType is null (user had no plan before AppSumo). Heimdall accessible.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""deactivate"", ""license_key"": ""<KEY-1>""}
+3. Check DB
+4. Check Heimdall workspace","Response: 200 {event: 'deactivate', success: true}.
+DB: KEY-1 status='deactivated', deactivatedAt set. Event created.
+Heimdall: Workspace updated with type='FREEMIUM', plan_id=null, license_code=null, license_provider=null."
+TC-056,Webhook - Deactivate,Deactivate: restore to previous paid plan,High,"License has previousPlanId and previousPlanType set (user had a paid plan before AppSumo).","1. Send deactivate webhook
+2. Check Heimdall workspace","Heimdall workspace restored with the original plan_id and type from previousPlanId/previousPlanType (not FREEMIUM)."
+TC-057,Webhook - Deactivate,Deactivate: non-existing license key (fix),Critical,"License key does NOT exist in DB.","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""deactivate"", ""license_key"": ""<nonexistent-uuid>""}
+3. Check DB","Response: 200. NEW license record created in DB with status='deactivated', deactivatedAt set. Event log created. No Heimdall sync (no workspace data). License is NOT lost."
+TC-058,Webhook - Deactivate,Deactivate: Heimdall sync failure returns 500,Critical,"License has Heimdall data. Heimdall API is down.","1. Make Heimdall unreachable
+2. Send deactivate webhook
+3. Check response","Response: 500 {event: 'deactivate', success: false, message: 'Local DB updated but Heimdall plan restore failed — please retry'}."
+TC-059,Webhook - Deactivate,Deactivate: no Heimdall data (user never redeemed),High,"License exists with status 'consumed' but no heimdallWorkspaceId.","1. Send deactivate webhook
+2. Check logs","Response: 200. License marked deactivated in DB. Log says 'No Heimdall workspace ID or redeemer email — skipping'. No Heimdall call made."
+TC-060,Webhook - Deactivate,Deactivate: missing license_key,High,"Partner exists","1. Send POST with {""event"": ""deactivate""}","Response: 400 {message: 'license_key required for deactivate'}."
+TC-061,Webhook - Deactivate,Deactivate after upgrade chain,Critical,"KEY-1 redeemed, upgraded to KEY-2, upgraded to KEY-3. KEY-3 is active with Heimdall data.","1. Send deactivate for KEY-3
+2. Check KEY-3 status in DB
+3. Check Heimdall workspace","KEY-3 status='deactivated'. Heimdall workspace restored to FREEMIUM (or previousPlan). previousPlanId from original redemption is used for restore."
+TC-062,Webhook - Test,Test event acknowledgment,Medium,"Partner exists","1. Send POST to /api/webhooks/partner?name=appsumo
+2. Body: {""event"": ""test""}","Response: 200 {event: 'test', success: true}. No DB changes."
+TC-063,Webhook - Test,Test flag acknowledgment,Medium,"Partner exists","1. Send POST with {""event"": ""purchase"", ""test"": true}","Response: 200 {event: 'test', success: true}. Test flag takes priority. No DB changes."
+TC-064,Webhook - Migrate,Migrate event acknowledgment,Medium,"Partner exists","1. Send POST with {""event"": ""migrate"", ""license_key"": ""<uuid>""}","Response: 200 {event: 'migrate', success: true}. Payload logged but no DB action."
+TC-065,Webhook Auth,HMAC signature validation - valid signature,High,"Partner has webhookSecret configured.","1. Compute HMAC-SHA256 of request body using partner's webhookSecret and timestamp
+2. Send webhook with x-webhook-signature and x-webhook-timestamp headers","Response: 200. Webhook processed normally. Logs show 'HMAC validation result: true'."
+TC-066,Webhook Auth,HMAC signature validation - invalid signature,High,"Partner has webhookSecret configured.","1. Send webhook with x-webhook-signature: invalid-sig and x-webhook-timestamp: current-time","Response: 401 {message: 'Invalid webhook signature'}. No DB changes."
+TC-067,Webhook Auth,HMAC signature validation - missing signature (no secret),Medium,"Partner has NO webhookSecret (null/empty).","1. Send webhook without signature headers","Response: 200. HMAC validation skipped. Webhook processed normally. Logs show 'Skipping HMAC validation'."
+TC-068,Webhook Auth,Missing partner name,High,"N/A","1. Send POST to /api/webhooks/partner (no ?name= and no x-partner-name header)","Response: 400 {message: 'Missing partner name...'}."
+TC-069,Webhook Auth,Non-existent partner name,High,"No partner named 'fakepartner'","1. Send POST to /api/webhooks/partner?name=fakepartner","Response: 404 {message: 'Partner not found'}."
+TC-070,Webhook Auth,Inactive partner,High,"Partner exists but isActive=false","1. Send POST to /api/webhooks/partner?name=<inactive-partner>","Response: 403 {message: 'Partner is inactive'}."
+TC-071,Webhook Auth,Invalid payload schema,Medium,"Partner exists","1. Send POST with {""event"": ""invalid_event""}","Response: 400 {message: 'Invalid payload', error: ...}. Zod validation details returned."
+TC-072,Webhook Auth,Partner name via header,Medium,"Partner exists","1. Send POST to /api/webhooks/partner (no query param)
+2. Set header x-partner-name: appsumo","Response: 200. Partner resolved from header. Webhook processed normally."
+TC-073,OAuth Flow,Start AppSumo OAuth authorization,Critical,"APPSUMO_CLIENT_ID env var is set. APP_BASE_URL is set.","1. Navigate to /api/auth/partner/authorize","Browser is redirected to https://appsumo.com/openid/authorize with query params: client_id, response_type=code, redirect_uri (matching callback URL), state (random hex). State is stored in session."
+TC-074,OAuth Flow,OAuth callback with valid code,Critical,"User completed AppSumo OAuth and is redirected back with code and state.","1. AppSumo redirects to /api/auth/partner/callback?partner=appsumo&code=<auth-code>&state=<state>
+2. Server exchanges code for access token
+3. Server fetches license key from AppSumo
+4. Check session and redirect","Access token obtained from AppSumo. License key fetched. If license doesn't exist in DB, it's created via handlePurchaseEvent. pendingLicenseKey stored in session. User redirected to /redeem/signup."
+TC-075,OAuth Flow,OAuth callback - health check (no code),Medium,"N/A","1. Send GET to /api/auth/partner/callback?partner=appsumo (no code)","Response: 200 {ok: true}. This is AppSumo's URL validation/health check."
+TC-076,OAuth Flow,OAuth callback - missing code non-AppSumo,Medium,"N/A","1. Send GET to /api/auth/partner/callback (no partner, no code)","Response: 400 {message: 'Missing authorization code'}."
+TC-077,OAuth Flow,OAuth callback - error from provider,Medium,"AppSumo returns error","1. /api/auth/partner/callback?error=access_denied","Response: 400 {message: 'AppSumo OAuth error: access_denied'}."
+TC-078,OAuth Flow,OAuth callback - license key race condition,High,"License key does NOT exist in local DB when OAuth callback processes.","1. Complete OAuth flow
+2. Callback fetches license key from AppSumo
+3. License key not found in local DB","Server creates the license record via handlePurchaseEvent with source 'oauth-callback'. License is stored in DB before redirecting to signup. No data loss."
+TC-079,OAuth Flow,OAuth callback - license key already exists,High,"License key already exists in DB (purchase webhook arrived first).","1. Purchase webhook creates license in DB
+2. User completes OAuth flow
+3. Callback finds license already in DB","Existing license is NOT overwritten. Status preserved. pendingLicenseKey set in session. User redirected to signup."
+TC-080,Redemption,Signup with valid data - new user,Critical,"pendingLicenseKey in session. License exists with status 'consumed'. User email NOT in Keycloak/Heimdall. Heimdall accessible.","1. Navigate to /redeem/signup (after OAuth flow)
+2. Enter email: newuser@test.com
+3. Enter firstName: John
+4. Enter lastName: Doe
+5. Enter password: SecurePass123
+6. Click Submit","Response: 200 {success: true, isNewUser: true, email, name}.
+Keycloak: New user created with email, name, and password.
+Heimdall: User added, root workspace found/created, plan set to appsumo_tier_N.
+DB: License status='redeemed', redeemedAt set, heimdallUserId, heimdallWorkspaceId, redeemerEmail, previousPlanId/previousPlanType all populated.
+Event: 'redeem' event created.
+Session: pendingLicenseKey cleared.
+User redirected to success page."
+TC-081,Redemption,Signup with valid data - existing user,High,"pendingLicenseKey in session. License exists. User email ALREADY exists in Keycloak.","1. Complete signup form with existing email","Keycloak returns 409 (user exists) — handled gracefully. Heimdall user/add upserts. Existing workspace found and updated with AppSumo plan. previousPlanId captures the user's current plan before override. Response: success, isNewUser: false."
+TC-082,Redemption,Signup - license already redeemed,High,"pendingLicenseKey in session. License status is already 'redeemed'.","1. Navigate to /redeem/signup
+2. Submit signup form","Response: 409 {message: 'This license has already been redeemed.', alreadyRedeemed: true, supportEmail: 'support@tinycommand.com'}. No Heimdall calls made."
+TC-083,Redemption,Signup - no pending license key in session,High,"No pendingLicenseKey in session (user navigated directly to /redeem/signup).","1. Open /redeem/signup directly without going through OAuth","Response: 400 {message: 'No pending license key. Please start the activation from AppSumo.'}."
+TC-084,Redemption,Signup - license key not found in DB,Medium,"pendingLicenseKey in session but license deleted from DB.","1. Submit signup form","Response: 404 {message: 'License key not found.'}."
+TC-085,Redemption,Signup - invalid email format,Medium,"pendingLicenseKey in session.","1. Enter email: not-an-email
+2. Submit","Validation error: 'Please enter a valid email address'. No API calls made."
+TC-086,Redemption,Signup - password too short,Medium,"pendingLicenseKey in session.","1. Enter password: short (< 8 chars)
+2. Submit","Validation error: 'Password must be at least 8 characters'."
+TC-087,Redemption,Signup - missing first name,Medium,"pendingLicenseKey in session.","1. Leave firstName empty
+2. Submit","Validation error: 'First name is required'."
+TC-088,Redemption,Signup - Heimdall provisioning failure,High,"pendingLicenseKey in session. Heimdall API is down.","1. Make Heimdall unreachable
+2. Submit valid signup form","Response: 500 {message: 'Provisioning failed at step: ... '}. License status NOT changed to 'redeemed' (stays at consumed). User can retry."
+TC-089,Redemption,License info endpoint,High,"pendingLicenseKey in session. License exists with status 'consumed'.","1. GET /api/redeem/license-info","Response: 200 {tier: N, status: 'consumed', partnerName: 'AppSumo'}."
+TC-090,Redemption,License info - already redeemed,Medium,"pendingLicenseKey in session. License status is 'redeemed'.","1. GET /api/redeem/license-info","Response: 409 {message: 'This license has already been redeemed.', alreadyRedeemed: true}."
+TC-091,Redemption,License info - no session,Medium,"No pendingLicenseKey in session.","1. GET /api/redeem/license-info","Response: 400 {message: 'No pending license key...'}."
+TC-092,Admin - Partners,List all partners,Medium,"Logged in as admin. Partners exist.","1. Navigate to /admin/partners","All partners listed with name, display name, contact email, isActive status."
+TC-093,Admin - Partners,Create new partner,High,"Logged in as admin.","1. Navigate to /admin/partners
+2. Click Create Partner
+3. Enter name: 'testpartner' (unique)
+4. Enter displayName: 'Test Partner'
+5. Enter contactEmail: test@partner.com
+6. Submit","New partner created with auto-generated apiKey and webhookSecret. Partner appears in list. Response includes all fields."
+TC-094,Admin - Partners,Create duplicate partner name,Medium,"Logged in as admin. Partner 'appsumo' exists.","1. Try to create partner with name: 'appsumo'","Response: 409 {message: 'Partner with this name already exists'}."
+TC-095,Admin - Partners,View partner detail with stats,Medium,"Logged in as admin. Partner with licenses exists.","1. Navigate to /admin/partners/:id","Partner details shown with stats: totalGenerated, totalConsumed, totalRedeemed, totalAvailable, totalDeactivated, totalUpgraded, totalDowngraded, tierDistribution."
+TC-096,Admin - Partners,Update partner,Medium,"Logged in as admin.","1. Navigate to /admin/partners/:id
+2. Update displayName or contactEmail
+3. Save","Partner updated. Changes reflected on reload."
+TC-097,Admin - Partner Users,Create partner user,High,"Logged in as admin. Partner exists.","1. Navigate to /admin/partners/:id
+2. Click Add User
+3. Enter email, name, password (min 6 chars), role (admin/manager/viewer)
+4. Submit","New partner user created with hashed password. User can login at /partner/login."
+TC-098,Admin - Partner Users,Create duplicate partner user email,Medium,"Partner user with this email already exists.","1. Try to create partner user with existing email","Response: 409 {message: 'User with this email already exists'}."
+TC-099,Admin - Partner Users,List partner users,Medium,"Logged in as admin. Partner has users.","1. Navigate to /admin/partners/:id
+2. View users section","All partner users listed with email, name, role, isActive, lastLoginAt (password hash NOT shown)."
+TC-100,Admin - Test Webhook,Test purchase via admin,Medium,"Logged in as admin. AppSumo partner exists.","1. Navigate to /admin/appsumo
+2. Send test purchase event with license_key and tier
+3. Check DB","License created/updated in DB. Response shows success and license object. NOTE: No Heimdall sync happens via this endpoint."
+TC-101,Admin - Test Webhook,Test upgrade via admin,Medium,"Logged in as admin. Previous license exists.","1. Send test upgrade via admin panel
+2. Provide prev_license_key, new_license_key, new_tier
+3. Check DB","DB updated: old key upgraded, new key created. NOTE: Heimdall is NOT synced via admin test endpoint — this is known behavior. To test full Heimdall sync, use the real webhook endpoint."
+TC-102,Admin - Test Webhook,Test downgrade via admin,Medium,"Logged in as admin. Previous license exists.","1. Send test downgrade via admin panel
+2. Provide prev_license_key, new_license_key, new_tier","DB updated locally. Heimdall NOT synced (admin test only)."
+TC-103,Admin - Test Webhook,Test deactivate via admin,Medium,"Logged in as admin. License exists.","1. Send test deactivate via admin panel with license_key","License marked deactivated in DB. Heimdall NOT synced (admin test only)."
+TC-104,Admin - Stats,Global stats accuracy,Medium,"Logged in as admin. Multiple partners with licenses.","1. Navigate to /admin/dashboard or GET /api/admin/stats","Shows totalPartners, totalKeys, totalRedeemed, totalActive. Per-partner breakdown with all status counts and tier distribution. Numbers match actual DB counts."
+TC-105,E2E - Full Lifecycle,Complete lifecycle: purchase → activate → redeem → upgrade → deactivate,Critical,"AppSumo partner configured. Heimdall accessible. Fresh state.","1. Send purchase webhook: {event: 'purchase', license_key: 'KEY-1', tier: 1}
+2. Verify KEY-1 in DB with status 'consumed'
+3. Send activate webhook: {event: 'activate', license_key: 'KEY-1'}
+4. Verify KEY-1 status still 'consumed'
+5. Complete OAuth flow with KEY-1
+6. Submit signup form (email, name, password)
+7. Verify KEY-1 status='redeemed', Heimdall data populated
+8. Verify Heimdall workspace has appsumo_tier_1 plan
+9. Send upgrade webhook: {event: 'upgrade', prev_license_key: 'KEY-1', license_key: 'KEY-2', tier: 2}
+10. Verify KEY-1 status='upgraded', KEY-2 status='redeemed' with Heimdall data
+11. Verify Heimdall workspace has appsumo_tier_2 plan
+12. Send deactivate webhook: {event: 'deactivate', license_key: 'KEY-2'}
+13. Verify KEY-2 status='deactivated'
+14. Verify Heimdall workspace restored to FREEMIUM","Every step produces the expected DB state and Heimdall state. No data loss. Full event audit trail exists for both KEY-1 and KEY-2."
+TC-106,E2E - Full Lifecycle,Complete lifecycle: purchase → redeem → downgrade → upgrade → deactivate,Critical,"Same as TC-105","1. Purchase KEY-1 tier 3
+2. OAuth + signup with KEY-1
+3. Verify Heimdall on appsumo_tier_3
+4. Downgrade: KEY-1→KEY-2, tier 1
+5. Verify Heimdall on appsumo_tier_1
+6. Upgrade: KEY-2→KEY-3, tier 2
+7. Verify Heimdall on appsumo_tier_2
+8. Deactivate KEY-3
+9. Verify Heimdall on FREEMIUM","Complete lifecycle with mixed up/down operations works correctly. Each step updates both DB and Heimdall. Heimdall data chains through all keys."
+TC-107,E2E - Event Audit,Verify complete event trail for upgraded license,High,"License has gone through purchase → activate → redeem → upgrade","1. GET /api/partner/licenses/:licenseKey for the original key
+2. Check event history
+3. GET events for the new key","Original key: events for purchase, activate, redeem, upgrade (status→upgraded).
+New key: event for upgrade (status→redeemed).
+All events have correct timestamps, triggeredBy, tier, previousTier, webhookPayload."
+TC-108,Edge Case,Duplicate webhook delivery (idempotency),High,"Upgrade webhook already processed. KEY-1 is 'upgraded', KEY-2 is 'redeemed'.","1. Send the same upgrade webhook again
+2. Check DB","KEY-1 stays 'upgraded'. KEY-2 gets updated again (same data, effectively idempotent). No duplicate license created. Two events created for KEY-2 (not ideal but not breaking). Heimdall sync runs again (idempotent update)."
+TC-109,Edge Case,Webhooks arrive out of order: activate before purchase,High,"License key does NOT exist in DB.","1. Send activate webhook first (before purchase)
+2. Then send purchase webhook","After activate: License created in DB with status 'consumed' (fix ensures creation).
+After purchase: Existing license found, status stays 'consumed'. No error."
+TC-110,Edge Case,Webhooks arrive out of order: upgrade before purchase,Medium,"Neither old nor new key exists in DB.","1. Send upgrade webhook with both keys not in DB","Old key not found — not updated but event created. New key created with 'redeemed' status but no Heimdall data. Heimdall sync skipped. No crash."
+TC-111,Edge Case,Concurrent webhook requests,Medium,"Same license key targeted by two webhooks simultaneously.","1. Send activate and purchase webhooks for same key at the exact same time","Both should complete without crashing. Possible race condition on insert (unique constraint on license_key). One may fail with constraint violation — verify no 500 error leaks and the key ends up in correct state."
+TC-112,Edge Case,Very long notes field,Low,"Logged in as partner.","1. Generate licenses with notes field containing 10000 characters","Should succeed. Notes stored as TEXT (no length limit in schema)."
+TC-113,Edge Case,Deactivate already deactivated license,Medium,"License already has status 'deactivated'.","1. Send deactivate webhook for already-deactivated key","License stays deactivated (deactivatedAt updated). Event created with previousStatus='deactivated'. Heimdall sync runs if data exists. No error."
+TC-114,Edge Case,Upgrade an already upgraded license,Medium,"License already has status 'upgraded'.","1. Send upgrade webhook with prev_license_key pointing to already-upgraded key","Old key updated to 'upgraded' again. New key created. Heimdall data may be null if it was cleared. Check that previousKey chain doesn't break."
+TC-115,Security,SQL injection in license search,High,"Logged in as partner.","1. Navigate to /partner/licenses
+2. Search for: ' OR 1=1 --","Search should return no results or only exact matches. No SQL injection. Drizzle ORM parameterizes queries."
+TC-116,Security,XSS in notes field,Medium,"Logged in as partner.","1. Generate licenses with notes: <script>alert('xss')</script>
+2. View license detail","Script tag is NOT executed. Notes displayed as plain text (React escapes by default)."
+TC-117,Security,Access partner B's licenses as partner A,High,"Two partners exist. Logged in as partner A.","1. Try to access partner B's license key via /api/partner/licenses/:key
+2. Try /api/partner/licenses with manipulated partnerId","Only partner A's licenses are returned. Partner B's data is inaccessible. API filters by session's partnerId."
+TC-118,Security,Partner user accessing admin endpoints,High,"Logged in as non-admin partner user.","1. Send request to /api/admin/partners
+2. Send request to /api/admin/stats","Response: 401. Admin endpoints require isAdmin=true in session."
+TC-119,Security,Webhook without authentication,Medium,"Partner has webhookSecret configured.","1. Send webhook with valid body but NO x-webhook-signature header
+2. Check if webhook is processed","If partner has webhookSecret AND signature+timestamp are both present, validation is enforced. If signature header is missing, validation is SKIPPED (current behavior). NOTE: This is a potential security gap — signature should be required when secret is configured."
+TC-120,UI - Redeem Pages,Signup page loads with license info,High,"pendingLicenseKey in session. License exists.","1. Navigate to /redeem/signup after OAuth flow","Page shows tier information. Form fields: email, firstName, lastName, password. Submit button enabled."
+TC-121,UI - Redeem Pages,Success page after redemption,High,"Just completed signup successfully.","1. After successful signup, check redirect","Success page loads showing confirmation message with user's email and name. Link/button to go to TinyCommand platform (login URL)."
+TC-122,UI - Partner Layout,Sidebar navigation works,Medium,"Logged in as partner.","1. Click Dashboard in sidebar
+2. Click Licenses
+3. Click Generate
+4. Click Reports","Each navigation link loads the correct page. Active state shown on current page's nav item."
+TC-123,UI - Admin Layout,Sidebar navigation works,Medium,"Logged in as admin.","1. Click Dashboard
+2. Click Partners
+3. Click Generate
+4. Click AppSumo","Each page loads correctly."
+TC-124,UI - Status Badges,License status badges display correctly,Low,"Licenses in various statuses exist.","1. View license list
+2. Check status badges for each status type","Each status has correct color coding: generated (neutral), consumed (blue), redeemed (green), upgraded (purple), downgraded (orange), deactivated (red/gray)."
+TC-125,Env Config,Missing APPSUMO_CLIENT_ID,Medium,"APPSUMO_CLIENT_ID env var not set.","1. Navigate to /api/auth/partner/authorize","Response: 500 {message: 'APPSUMO_CLIENT_ID env var not configured'}."
+TC-126,Env Config,Missing HEIMDALL_API_URL,Medium,"HEIMDALL_API_URL not set.","1. Complete signup flow","Falls back to default: https://heimdallapi.tinycommand.com. Provisioning should still work if default URL is reachable."
+TC-127,Env Config,Missing SESSION_SECRET,Medium,"SESSION_SECRET not set.","1. Start the server","Server should either use a default or fail to start with clear error. Sessions must be secure."

@@ -125,6 +125,15 @@ router.post("/partner", async (req, res) => {
         });
       }
       console.log("[Webhook:upgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", upgradeNewKey.slice(0, 8) + "...", "| New tier:", upgradeNewTier);
+
+      // Fetch Heimdall data from the old key BEFORE updating it
+      const upgradePrevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+      console.log("[Webhook:upgrade] Previous license Heimdall data:", {
+        heimdallWorkspaceId: upgradePrevLicense?.heimdallWorkspaceId,
+        heimdallUserId: upgradePrevLicense?.heimdallUserId,
+        redeemerEmail: upgradePrevLicense?.redeemerEmail,
+      });
+
       await storage.handleUpgradeEvent(
         partner.id,
         payload.prev_license_key,
@@ -135,30 +144,33 @@ router.post("/partner", async (req, res) => {
       console.log("[Webhook:upgrade] Local DB updated");
 
       // Sync plan change to Heimdall
-      try {
-        const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
-        console.log("[Webhook:upgrade] Previous license Heimdall data:", {
-          heimdallWorkspaceId: prevLicense?.heimdallWorkspaceId,
-          heimdallUserId: prevLicense?.heimdallUserId,
-          redeemerEmail: prevLicense?.redeemerEmail,
-        });
-        if (prevLicense?.heimdallWorkspaceId && prevLicense?.redeemerEmail) {
+      let heimdallSyncSuccess = false;
+      if (upgradePrevLicense?.heimdallWorkspaceId && upgradePrevLicense?.redeemerEmail) {
+        try {
           console.log("[Webhook:upgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanForUser(
-            prevLicense.heimdallWorkspaceId,
+            upgradePrevLicense.heimdallWorkspaceId,
             upgradeNewTier,
             upgradeNewKey,
-            prevLicense.redeemerEmail
+            upgradePrevLicense.redeemerEmail
           );
           console.log("[Webhook:upgrade] Heimdall plan sync SUCCESS");
-        } else {
-          console.log("[Webhook:upgrade] Missing Heimdall workspace ID or redeemer email — skipping sync. workspaceId:", prevLicense?.heimdallWorkspaceId, "email:", prevLicense?.redeemerEmail);
+          heimdallSyncSuccess = true;
+        } catch (err) {
+          console.error("[Webhook:upgrade] Heimdall sync FAILED:", err);
+          // Return 500 so AppSumo retries the webhook
+          return res.status(500).json({
+            event: "upgrade",
+            success: false,
+            message: "Local DB updated but Heimdall plan sync failed — please retry",
+          });
         }
-      } catch (err) {
-        console.error("[Webhook:upgrade] Heimdall sync FAILED (non-blocking):", err);
+      } else {
+        console.log("[Webhook:upgrade] No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
+        heimdallSyncSuccess = true; // Nothing to sync is not a failure
       }
 
-      return res.json({ event: "upgrade", success: true });
+      return res.json({ event: "upgrade", success: true, heimdallSynced: heimdallSyncSuccess });
     }
 
     case "downgrade": {
@@ -173,6 +185,15 @@ router.post("/partner", async (req, res) => {
         });
       }
       console.log("[Webhook:downgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", downgradeNewKey.slice(0, 8) + "...", "| New tier:", downgradeNewTier);
+
+      // Fetch Heimdall data from the old key BEFORE updating it
+      const downgradePrevLicense = await storage.getLicenseByKey(payload.prev_license_key);
+      console.log("[Webhook:downgrade] Previous license Heimdall data:", {
+        heimdallWorkspaceId: downgradePrevLicense?.heimdallWorkspaceId,
+        heimdallUserId: downgradePrevLicense?.heimdallUserId,
+        redeemerEmail: downgradePrevLicense?.redeemerEmail,
+      });
+
       await storage.handleDowngradeEvent(
         partner.id,
         payload.prev_license_key,
@@ -183,29 +204,33 @@ router.post("/partner", async (req, res) => {
       console.log("[Webhook:downgrade] Local DB updated");
 
       // Sync plan change to Heimdall
-      try {
-        const prevLicense = await storage.getLicenseByKey(payload.prev_license_key);
-        console.log("[Webhook:downgrade] Previous license Heimdall data:", {
-          heimdallWorkspaceId: prevLicense?.heimdallWorkspaceId,
-          heimdallUserId: prevLicense?.heimdallUserId,
-        });
-        if (prevLicense?.heimdallWorkspaceId && prevLicense?.redeemerEmail) {
+      let downgradeSyncSuccess = false;
+      if (downgradePrevLicense?.heimdallWorkspaceId && downgradePrevLicense?.redeemerEmail) {
+        try {
           console.log("[Webhook:downgrade] Syncing plan change to Heimdall...");
           await updateWorkspacePlanForUser(
-            prevLicense.heimdallWorkspaceId,
+            downgradePrevLicense.heimdallWorkspaceId,
             downgradeNewTier,
             downgradeNewKey,
-            prevLicense.redeemerEmail
+            downgradePrevLicense.redeemerEmail
           );
           console.log("[Webhook:downgrade] Heimdall plan sync SUCCESS");
-        } else {
-          console.log("[Webhook:downgrade] Missing Heimdall workspace ID or redeemer email — skipping sync. workspaceId:", prevLicense?.heimdallWorkspaceId, "email:", prevLicense?.redeemerEmail);
+          downgradeSyncSuccess = true;
+        } catch (err) {
+          console.error("[Webhook:downgrade] Heimdall sync FAILED:", err);
+          // Return 500 so AppSumo retries the webhook
+          return res.status(500).json({
+            event: "downgrade",
+            success: false,
+            message: "Local DB updated but Heimdall plan sync failed — please retry",
+          });
         }
-      } catch (err) {
-        console.error("[Webhook:downgrade] Heimdall sync FAILED (non-blocking):", err);
+      } else {
+        console.log("[Webhook:downgrade] No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
+        downgradeSyncSuccess = true; // Nothing to sync is not a failure
       }
 
-      return res.json({ event: "downgrade", success: true });
+      return res.json({ event: "downgrade", success: true, heimdallSynced: downgradeSyncSuccess });
     }
 
     case "deactivate": {
@@ -219,24 +244,26 @@ router.post("/partner", async (req, res) => {
       console.log("[Webhook:deactivate] Local DB updated — license deactivated");
 
       // Move user to free plan on Heimdall
-      try {
-        const license = await storage.getLicenseByKey(payload.license_key);
-        console.log("[Webhook:deactivate] License Heimdall data:", {
-          heimdallWorkspaceId: license?.heimdallWorkspaceId,
-          redeemerEmail: license?.redeemerEmail,
-        });
-        if (license?.heimdallWorkspaceId && license?.redeemerEmail) {
-          const restorePlanId = license.previousPlanId || null;
-          const restorePlanType = license.previousPlanType || "FREEMIUM";
-          console.log("[Webhook:deactivate] Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
-          const { token } = await addHeimdallUser(license.redeemerEmail, "", "");
+      // Fetch the license data AFTER deactivation (Heimdall fields are preserved)
+      const deactivatedLicense = await storage.getLicenseByKey(payload.license_key);
+      console.log("[Webhook:deactivate] License Heimdall data:", {
+        heimdallWorkspaceId: deactivatedLicense?.heimdallWorkspaceId,
+        redeemerEmail: deactivatedLicense?.redeemerEmail,
+      });
 
-          const url = `${process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com"}/service/v0/workspace/add`;
-          const res = await fetch(url, {
+      if (deactivatedLicense?.heimdallWorkspaceId && deactivatedLicense?.redeemerEmail) {
+        try {
+          const restorePlanId = deactivatedLicense.previousPlanId || null;
+          const restorePlanType = deactivatedLicense.previousPlanType || "FREEMIUM";
+          console.log("[Webhook:deactivate] Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
+          const { token } = await addHeimdallUser(deactivatedLicense.redeemerEmail, "", "");
+
+          const heimdallUrl = `${process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com"}/service/v0/workspace/add`;
+          const heimdallRes = await fetch(heimdallUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json", token },
             body: JSON.stringify({
-              _id: license.heimdallWorkspaceId,
+              _id: deactivatedLicense.heimdallWorkspaceId,
               type: restorePlanType,
               plan_id: restorePlanId,
               license_code: null,
@@ -244,19 +271,29 @@ router.post("/partner", async (req, res) => {
             }),
           });
 
-          const data = (await res.json()) as Record<string, unknown>;
-          console.log("[Webhook:deactivate] Heimdall response:", JSON.stringify(data).slice(0, 300));
+          const heimdallData = (await heimdallRes.json()) as Record<string, unknown>;
+          console.log("[Webhook:deactivate] Heimdall response:", JSON.stringify(heimdallData).slice(0, 300));
 
-          if (data.status === "success") {
+          if (heimdallData.status === "success") {
             console.log("[Webhook:deactivate] Workspace moved to free plan SUCCESS");
           } else {
-            console.error("[Webhook:deactivate] Heimdall returned status:failed:", JSON.stringify(data));
+            console.error("[Webhook:deactivate] Heimdall returned status:failed:", JSON.stringify(heimdallData));
+            return res.status(500).json({
+              event: "deactivate",
+              success: false,
+              message: "Local DB updated but Heimdall plan restore failed — please retry",
+            });
           }
-        } else {
-          console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping");
+        } catch (err) {
+          console.error("[Webhook:deactivate] Heimdall free plan sync FAILED:", err);
+          return res.status(500).json({
+            event: "deactivate",
+            success: false,
+            message: "Local DB updated but Heimdall plan restore failed — please retry",
+          });
         }
-      } catch (err) {
-        console.error("[Webhook:deactivate] Heimdall free plan sync FAILED (non-blocking):", err);
+      } else {
+        console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping (user may not have redeemed)");
       }
 
       return res.json({ event: "deactivate", success: true });

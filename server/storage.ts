@@ -457,16 +457,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async handleActivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
-    const existing = await this.getLicenseByKey(licenseKey);
+    let existing = await this.getLicenseByKey(licenseKey);
     const previousStatus = existing?.status ?? LICENSE_STATUS.GENERATED;
 
-    // Activate webhook means user clicked "Activate" on AppSumo.
-    // Set to CONSUMED (ready to redeem), NOT REDEEMED.
-    // REDEEMED is only set after the user completes the signup form
-    // and Heimdall provisioning succeeds.
-    const updated = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.CONSUMED, {
-      consumedAt: new Date(),
-    });
+    // If the key doesn't exist yet (purchase webhook hasn't arrived), create it
+    if (!existing) {
+      const tier = (payload as Record<string, unknown>)?.tier as number ?? 1;
+      const [created] = await db
+        .insert(partnerLicenseKeys)
+        .values({
+          licenseKey,
+          partnerId,
+          tier,
+          status: LICENSE_STATUS.CONSUMED,
+          consumedAt: new Date(),
+        })
+        .returning();
+      existing = created;
+    } else {
+      // Activate webhook means user clicked "Activate" on AppSumo.
+      // Set to CONSUMED (ready to redeem), NOT REDEEMED.
+      // REDEEMED is only set after the user completes the signup form
+      // and Heimdall provisioning succeeds.
+      const result = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.CONSUMED, {
+        consumedAt: new Date(),
+      });
+      existing = result ?? existing;
+    }
 
     await this.createLicenseEvent({
       licenseKey,
@@ -476,10 +493,10 @@ export class DatabaseStorage implements IStorage {
       newStatus: LICENSE_STATUS.CONSUMED,
       triggeredBy: "webhook",
       webhookPayload: payload,
-      tier: existing?.tier,
+      tier: existing.tier,
     });
 
-    return updated!;
+    return existing;
   }
 
   async handleUpgradeEvent(partnerId: number, previousKey: string, newKey: string, newTier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
@@ -505,9 +522,11 @@ export class DatabaseStorage implements IStorage {
       previousTier,
     });
 
+    let newLicense: PartnerLicenseKey;
     const existingNew = await this.getLicenseByKey(newKey);
     if (existingNew) {
       const updated = await this.updateLicenseStatus(newKey, LICENSE_STATUS.REDEEMED, {
+        tier: newTier,
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
@@ -517,28 +536,42 @@ export class DatabaseStorage implements IStorage {
         previousPlanId: existingPrevious?.previousPlanId,
         previousPlanType: existingPrevious?.previousPlanType,
       });
-      return updated!;
+      newLicense = updated!;
+    } else {
+      const [created] = await db
+        .insert(partnerLicenseKeys)
+        .values({
+          licenseKey: newKey,
+          partnerId,
+          tier: newTier,
+          status: LICENSE_STATUS.REDEEMED,
+          redeemedAt: new Date(),
+          userId: existingPrevious?.userId,
+          previousKey,
+          heimdallUserId: existingPrevious?.heimdallUserId,
+          heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+          redeemerEmail: existingPrevious?.redeemerEmail,
+          previousPlanId: existingPrevious?.previousPlanId,
+          previousPlanType: existingPrevious?.previousPlanType,
+        })
+        .returning();
+      newLicense = created;
     }
 
-    const [created] = await db
-      .insert(partnerLicenseKeys)
-      .values({
-        licenseKey: newKey,
-        partnerId,
-        tier: newTier,
-        status: LICENSE_STATUS.REDEEMED,
-        redeemedAt: new Date(),
-        userId: existingPrevious?.userId,
-        previousKey,
-        heimdallUserId: existingPrevious?.heimdallUserId,
-        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
-        redeemerEmail: existingPrevious?.redeemerEmail,
-        previousPlanId: existingPrevious?.previousPlanId,
-        previousPlanType: existingPrevious?.previousPlanType,
-      })
-      .returning();
+    // Create event for the NEW key so it has an audit trail
+    await this.createLicenseEvent({
+      licenseKey: newKey,
+      partnerId,
+      eventType: "upgrade",
+      previousStatus: existingNew?.status ?? null,
+      newStatus: LICENSE_STATUS.REDEEMED,
+      triggeredBy: "webhook",
+      webhookPayload: payload,
+      tier: newTier,
+      previousTier,
+    });
 
-    return created;
+    return newLicense;
   }
 
   async handleDowngradeEvent(partnerId: number, previousKey: string, newKey: string, newTier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
@@ -564,9 +597,11 @@ export class DatabaseStorage implements IStorage {
       previousTier,
     });
 
+    let newLicense: PartnerLicenseKey;
     const existingNew = await this.getLicenseByKey(newKey);
     if (existingNew) {
       const updated = await this.updateLicenseStatus(newKey, LICENSE_STATUS.REDEEMED, {
+        tier: newTier,
         redeemedAt: new Date(),
         userId: existingPrevious?.userId,
         previousKey,
@@ -576,37 +611,68 @@ export class DatabaseStorage implements IStorage {
         previousPlanId: existingPrevious?.previousPlanId,
         previousPlanType: existingPrevious?.previousPlanType,
       });
-      return updated!;
+      newLicense = updated!;
+    } else {
+      const [created] = await db
+        .insert(partnerLicenseKeys)
+        .values({
+          licenseKey: newKey,
+          partnerId,
+          tier: newTier,
+          status: LICENSE_STATUS.REDEEMED,
+          redeemedAt: new Date(),
+          userId: existingPrevious?.userId,
+          previousKey,
+          heimdallUserId: existingPrevious?.heimdallUserId,
+          heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
+          redeemerEmail: existingPrevious?.redeemerEmail,
+          previousPlanId: existingPrevious?.previousPlanId,
+          previousPlanType: existingPrevious?.previousPlanType,
+        })
+        .returning();
+      newLicense = created;
     }
 
-    const [created] = await db
-      .insert(partnerLicenseKeys)
-      .values({
-        licenseKey: newKey,
-        partnerId,
-        tier: newTier,
-        status: LICENSE_STATUS.REDEEMED,
-        redeemedAt: new Date(),
-        userId: existingPrevious?.userId,
-        previousKey,
-        heimdallUserId: existingPrevious?.heimdallUserId,
-        heimdallWorkspaceId: existingPrevious?.heimdallWorkspaceId,
-        redeemerEmail: existingPrevious?.redeemerEmail,
-        previousPlanId: existingPrevious?.previousPlanId,
-        previousPlanType: existingPrevious?.previousPlanType,
-      })
-      .returning();
+    // Create event for the NEW key so it has an audit trail
+    await this.createLicenseEvent({
+      licenseKey: newKey,
+      partnerId,
+      eventType: "downgrade",
+      previousStatus: existingNew?.status ?? null,
+      newStatus: LICENSE_STATUS.REDEEMED,
+      triggeredBy: "webhook",
+      webhookPayload: payload,
+      tier: newTier,
+      previousTier,
+    });
 
-    return created;
+    return newLicense;
   }
 
   async handleDeactivateEvent(partnerId: number, licenseKey: string, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
-    const existing = await this.getLicenseByKey(licenseKey);
+    let existing = await this.getLicenseByKey(licenseKey);
     const previousStatus = existing?.status ?? LICENSE_STATUS.REDEEMED;
 
-    const updated = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.DEACTIVATED, {
-      deactivatedAt: new Date(),
-    });
+    if (!existing) {
+      // Key doesn't exist in DB — create it in deactivated state
+      const tier = (payload as Record<string, unknown>)?.tier as number ?? 1;
+      const [created] = await db
+        .insert(partnerLicenseKeys)
+        .values({
+          licenseKey,
+          partnerId,
+          tier,
+          status: LICENSE_STATUS.DEACTIVATED,
+          deactivatedAt: new Date(),
+        })
+        .returning();
+      existing = created;
+    } else {
+      const result = await this.updateLicenseStatus(licenseKey, LICENSE_STATUS.DEACTIVATED, {
+        deactivatedAt: new Date(),
+      });
+      existing = result ?? existing;
+    }
 
     await this.createLicenseEvent({
       licenseKey,
@@ -616,10 +682,10 @@ export class DatabaseStorage implements IStorage {
       newStatus: LICENSE_STATUS.DEACTIVATED,
       triggeredBy: "webhook",
       webhookPayload: payload,
-      tier: existing?.tier,
+      tier: existing.tier,
     });
 
-    return updated!;
+    return existing;
   }
 }
 
