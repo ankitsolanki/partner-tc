@@ -106,6 +106,8 @@ export const partnerLicenseKeys = pgTable(
     redeemerEmail: varchar("redeemer_email", { length: 255 }),
     previousPlanId: text("previous_plan_id"),
     previousPlanType: text("previous_plan_type"),
+    unitQuantity: integer("unit_quantity").default(0),
+    partnerPlanName: varchar("partner_plan_name", { length: 255 }),
   },
   (table) => [
     index("idx_license_keys_partner_id").on(table.partnerId),

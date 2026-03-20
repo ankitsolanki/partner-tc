@@ -503,6 +503,10 @@ export class DatabaseStorage implements IStorage {
     const existingPrevious = await this.getLicenseByKey(previousKey);
     const previousTier = existingPrevious?.tier;
 
+    // Extract add-on fields from payload
+    const unitQuantity = (payload as Record<string, unknown>)?.unit_quantity as number ?? 0;
+    const partnerPlanName = (payload as Record<string, unknown>)?.partner_plan_name as string ?? null;
+
     if (existingPrevious) {
       await this.updateLicenseStatus(previousKey, LICENSE_STATUS.UPGRADED, {
         upgradedAt: new Date(),
@@ -535,6 +539,8 @@ export class DatabaseStorage implements IStorage {
         redeemerEmail: existingPrevious?.redeemerEmail,
         previousPlanId: existingPrevious?.previousPlanId,
         previousPlanType: existingPrevious?.previousPlanType,
+        unitQuantity,
+        partnerPlanName,
       });
       newLicense = updated!;
     } else {
@@ -553,6 +559,8 @@ export class DatabaseStorage implements IStorage {
           redeemerEmail: existingPrevious?.redeemerEmail,
           previousPlanId: existingPrevious?.previousPlanId,
           previousPlanType: existingPrevious?.previousPlanType,
+          unitQuantity,
+          partnerPlanName,
         })
         .returning();
       newLicense = created;
@@ -577,6 +585,10 @@ export class DatabaseStorage implements IStorage {
   async handleDowngradeEvent(partnerId: number, previousKey: string, newKey: string, newTier: number, payload: Record<string, unknown> | null): Promise<PartnerLicenseKey> {
     const existingPrevious = await this.getLicenseByKey(previousKey);
     const previousTier = existingPrevious?.tier;
+
+    // Extract add-on fields from payload
+    const unitQuantity = (payload as Record<string, unknown>)?.unit_quantity as number ?? 0;
+    const partnerPlanName = (payload as Record<string, unknown>)?.partner_plan_name as string ?? null;
 
     if (existingPrevious) {
       await this.updateLicenseStatus(previousKey, LICENSE_STATUS.DOWNGRADED, {
@@ -610,6 +622,8 @@ export class DatabaseStorage implements IStorage {
         redeemerEmail: existingPrevious?.redeemerEmail,
         previousPlanId: existingPrevious?.previousPlanId,
         previousPlanType: existingPrevious?.previousPlanType,
+        unitQuantity,
+        partnerPlanName,
       });
       newLicense = updated!;
     } else {
@@ -628,6 +642,8 @@ export class DatabaseStorage implements IStorage {
           redeemerEmail: existingPrevious?.redeemerEmail,
           previousPlanId: existingPrevious?.previousPlanId,
           previousPlanType: existingPrevious?.previousPlanType,
+          unitQuantity,
+          partnerPlanName,
         })
         .returning();
       newLicense = created;

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { validateHmacSignature } from "../utils/crypto";
 import { storage } from "../storage";
-import { updateWorkspacePlanForUser, addHeimdallUser } from "../services/heimdall";
+import { updateWorkspacePlanForUser, addHeimdallUser, findHeimdallUser } from "../services/heimdall";
+import { updateAddOnCredits } from "../services/track";
 import { z } from "zod";
 
 const router = Router();
@@ -16,6 +17,13 @@ const webhookPayloadSchema = z.object({
   user_id: z.number().optional(),
   partner_name: z.string().optional(),
   test: z.boolean().optional(),
+  // Add-on / extended fields from AppSumo
+  unit_quantity: z.number().optional(),
+  partner_plan_name: z.string().optional(),
+  license_status: z.string().optional(),
+  extra: z.record(z.unknown()).optional(),
+  event_timestamp: z.number().optional(),
+  created_at: z.number().optional(),
 });
 
 router.post("/partner", async (req, res) => {
@@ -80,6 +88,13 @@ router.post("/partner", async (req, res) => {
 
   const payload = parsed.data;
   console.log("[Webhook] Parsed event:", payload.event, "| license_key:", payload.license_key?.slice(0, 8), "| tier:", payload.tier);
+  console.log("[Webhook] Add-on fields:", {
+    unit_quantity: payload.unit_quantity ?? "NOT_SENT",
+    partner_plan_name: payload.partner_plan_name ?? "NOT_SENT",
+    license_status: payload.license_status ?? "NOT_SENT",
+    extra: payload.extra ?? "NOT_SENT",
+    prev_license_key: payload.prev_license_key?.slice(0, 8) ?? "NOT_SENT",
+  });
 
   if (payload.event === "test" || payload.test) {
     console.log("[Webhook] Test event — acknowledging");
@@ -143,6 +158,9 @@ router.post("/partner", async (req, res) => {
       );
       console.log("[Webhook:upgrade] Local DB updated");
 
+      const upgradeUnitQty = payload.unit_quantity ?? 0;
+      console.log("[Webhook:upgrade] unit_quantity:", upgradeUnitQty, "| partner_plan_name:", payload.partner_plan_name ?? "none");
+
       // Sync plan change to Heimdall
       let heimdallSyncSuccess = false;
       if (upgradePrevLicense?.heimdallWorkspaceId && upgradePrevLicense?.redeemerEmail) {
@@ -170,7 +188,28 @@ router.post("/partner", async (req, res) => {
         heimdallSyncSuccess = true; // Nothing to sync is not a failure
       }
 
-      return res.json({ event: "upgrade", success: true, heimdallSynced: heimdallSyncSuccess });
+      // Update monthly credit allowance if unit_quantity > 0 (add-on purchase)
+      let creditsUpdated = false;
+      if (upgradeUnitQty > 0 && upgradePrevLicense?.heimdallWorkspaceId) {
+        try {
+          console.log("[Webhook:upgrade] Add-on detected — updating monthly credit allowance...");
+          await updateAddOnCredits(
+            upgradePrevLicense.heimdallWorkspaceId,
+            upgradeUnitQty,
+            upgradeNewTier
+          );
+          creditsUpdated = true;
+          console.log("[Webhook:upgrade] Monthly credit allowance updated successfully");
+        } catch (err) {
+          console.error("[Webhook:upgrade] Credit allowance update FAILED (non-blocking):", err);
+          // Don't return 500 for credit failures — the plan upgrade succeeded.
+          // Credits can be manually reconciled.
+        }
+      } else if (upgradeUnitQty > 0) {
+        console.log("[Webhook:upgrade] Add-on detected but no workspace ID — cannot update credits");
+      }
+
+      return res.json({ event: "upgrade", success: true, heimdallSynced: heimdallSyncSuccess, creditsUpdated });
     }
 
     case "downgrade": {
@@ -256,7 +295,14 @@ router.post("/partner", async (req, res) => {
           const restorePlanId = deactivatedLicense.previousPlanId || null;
           const restorePlanType = deactivatedLicense.previousPlanType || "FREEMIUM";
           console.log("[Webhook:deactivate] Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
-          const { token } = await addHeimdallUser(deactivatedLicense.redeemerEmail, "", "");
+
+          // Fetch existing user to get their real name before calling user/add
+          const deactivateUser = await findHeimdallUser(deactivatedLicense.redeemerEmail);
+          const { token } = await addHeimdallUser(
+            deactivatedLicense.redeemerEmail,
+            deactivateUser?.firstName || "",
+            deactivateUser?.lastName || ""
+          );
 
           const heimdallUrl = `${process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com"}/service/v0/workspace/add`;
           const heimdallRes = await fetch(heimdallUrl, {

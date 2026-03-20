@@ -116,14 +116,26 @@ export async function addHeimdallUser(
   console.log("[Heimdall:2-addUser] ─── Adding user to Heimdall MongoDB ───");
   console.log("[Heimdall:2-addUser] URL:", url);
 
+  // Heimdall's user/add service requires `name` to be truthy (validation check).
+  // The User model's add method handles first_name/last_name smartly:
+  //   - If first_name is falsy in body → preserves existing value from DB
+  //   - If first_name is truthy in body → OVERWRITES with new value
+  // So: always send real names when available. When names aren't available
+  // (webhook sync fallback), send only `name` as placeholder — do NOT send
+  // first_name/last_name so Heimdall preserves existing user data.
   const requestBody: Record<string, string> = {
     email_id: email,
   };
-  // Only send name fields if provided — avoids overwriting existing user data
   if (firstName || lastName) {
+    // Real names available — send them all
     requestBody.name = `${firstName} ${lastName}`.trim();
     requestBody.first_name = firstName;
     requestBody.last_name = lastName;
+  } else {
+    // No names available (webhook sync fallback for unknown users).
+    // Send name to pass Heimdall's validation, but omit first_name/last_name
+    // so the model preserves existing values for known users.
+    requestBody.name = email.split("@")[0];
   }
   console.log("[Heimdall:2-addUser] Request body:", JSON.stringify(requestBody));
 
@@ -335,6 +347,9 @@ async function triggerForgotPassword(email: string): Promise<void> {
 }
 
 // ─── Service token (for webhook-triggered plan updates) ───────────────────────
+// The signed token endpoint signs whatever body you send as the JWT payload.
+// We include { sub: "service" } so that endpoints requiring decoded.user_id
+// (like user/find/one) accept the token — Heimdall sets user_id = decoded.sub.
 export async function getServiceToken(): Promise<string> {
   const url = `${HEIMDALL_BASE}/service/v0/get/signed/token`;
 
@@ -347,6 +362,7 @@ export async function getServiceToken(): Promise<string> {
       app_id: "digihealth-admin-token-creator",
       secret: "hockeystick",
     },
+    body: JSON.stringify({ sub: "service" }),
   });
 
   console.log("[Heimdall:serviceToken] Response status:", res.status);
@@ -370,9 +386,64 @@ export async function getServiceToken(): Promise<string> {
   return token;
 }
 
+// ─── Find existing user in Heimdall ───────────────────────────────────────────
+// Uses service token + user/find/one to get user data without modifying anything.
+export async function findHeimdallUser(
+  email: string
+): Promise<{ firstName: string; lastName: string; name: string; userId: string } | null> {
+  console.log("[Heimdall:findUser] ─── Looking up user by email ───");
+  console.log("[Heimdall:findUser] Email:", email);
+
+  try {
+    const serviceToken = await getServiceToken();
+
+    const params = new URLSearchParams({ email_id: email });
+    const url = `${HEIMDALL_BASE}/service/v0/user/find/one?${params.toString()}`;
+    console.log("[Heimdall:findUser] URL:", url);
+
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { token: serviceToken },
+    });
+
+    console.log("[Heimdall:findUser] Response status:", res.status);
+
+    if (!res.ok) {
+      console.log("[Heimdall:findUser] HTTP error:", res.status, "— user may not exist");
+      return null;
+    }
+
+    const data = (await res.json()) as Record<string, unknown>;
+    console.log("[Heimdall:findUser] Response:", JSON.stringify(data).slice(0, 500));
+
+    if (data.status === "failed") {
+      console.log("[Heimdall:findUser] Heimdall returned status:failed — user not found");
+      return null;
+    }
+
+    const result = data.result as Record<string, unknown> | undefined;
+    const firstName = (result?.first_name as string) || "";
+    const lastName = (result?.last_name as string) || "";
+    const name = (result?.name as string) || "";
+    const userId = (result?._id ?? result?.id) as string | undefined;
+
+    console.log("[Heimdall:findUser] Found user:", { userId, name, firstName, lastName });
+
+    if (!userId) {
+      console.log("[Heimdall:findUser] No user ID in response — treating as not found");
+      return null;
+    }
+
+    return { firstName, lastName, name, userId };
+  } catch (err) {
+    console.error("[Heimdall:findUser] Error looking up user (non-fatal):", err);
+    return null;
+  }
+}
+
 // ─── Update workspace plan (for webhooks) ─────────────────────────────────────
-// Service token doesn't have workspace permissions, so we get a user token
-// via user/add (upsert) using the redeemer's email, then use that to update.
+// First fetches the existing user to get their real name, then calls user/add
+// with that name to get a user token (service token can't update workspaces).
 export async function updateWorkspacePlanForUser(
   workspaceId: string,
   tier: number,
@@ -391,9 +462,17 @@ export async function updateWorkspacePlanForUser(
     return;
   }
 
-  // Get a user token by calling user/add (upsert — won't create a new user)
+  // Step 1: Fetch existing user to get their real name
+  console.log("[Heimdall:updatePlan] Fetching existing user from Heimdall...");
+  const existingUser = await findHeimdallUser(redeemerEmail);
+
+  const firstName = existingUser?.firstName || "";
+  const lastName = existingUser?.lastName || "";
+  console.log("[Heimdall:updatePlan] User lookup result:", existingUser ? { firstName, lastName, name: existingUser.name } : "NOT_FOUND");
+
+  // Step 2: Get user token via user/add (upsert) with the real name
   console.log("[Heimdall:updatePlan] Getting user token via user/add...");
-  const { token } = await addHeimdallUser(redeemerEmail, "", "");
+  const { token } = await addHeimdallUser(redeemerEmail, firstName, lastName);
   console.log("[Heimdall:updatePlan] Got user token (length:", token.length, ")");
 
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
