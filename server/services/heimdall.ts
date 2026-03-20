@@ -2,7 +2,7 @@ import { randomBytes } from "crypto";
 
 const HEIMDALL_BASE = process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com";
 
-const PLAN_ID_MAP: Record<number, string> = {
+export const PLAN_ID_MAP: Record<number, string> = {
   1: "e602e61d-7eec-45f0-8a17-405173947090",
   2: "82480e8b-8b70-4939-bf0f-6b50b069bb88",
   3: "d80c78c8-1634-4548-9eab-88daf6dc225c",
@@ -269,11 +269,13 @@ async function addWorkspacePlan(
   console.log("[Heimdall:4-addWorkspace] URL:", url);
   console.log("[Heimdall:4-addWorkspace] Mode:", params.workspaceId ? "UPDATE existing" : "CREATE new");
 
+  // Only send plan_id and type — do NOT send license_code/license_provider.
+  // Heimdall passes those to tiny-track's upsert_track_customer queue job,
+  // causing handleLicenseAndSubscription() to create a duplicate subscription.
+  // The correct AppSumo plan is set on tiny-track separately via change-plan API.
   const body: Record<string, unknown> = {
     owner_id: params.ownerId,
     name: params.workspaceName,
-    license_code: params.licenseKey,
-    license_provider: "appsumo",
     plan_id: params.planId,
     type: params.planType,
   };
@@ -478,8 +480,6 @@ export async function updateWorkspacePlanForUser(
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
   const requestBody = {
     _id: workspaceId,
-    license_code: licenseKey,
-    license_provider: "appsumo",
     plan_id: planId,
     type: planType,
   };
