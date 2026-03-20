@@ -279,11 +279,32 @@ router.post("/partner", async (req, res) => {
         return res.status(400).json({ message: "license_key required for deactivate" });
       }
       console.log("[Webhook:deactivate] Key:", payload.license_key.slice(0, 8) + "...");
+
+      // Check the license status BEFORE marking it deactivated
+      // If the key was already "upgraded" or "downgraded", another key has taken over.
+      // AppSumo sends deactivate for the OLD key after an upgrade — we should NOT
+      // undo the upgrade by restoring to FREEMIUM.
+      const licenseBeforeDeactivate = await storage.getLicenseByKey(payload.license_key);
+      const statusBeforeDeactivate = licenseBeforeDeactivate?.status;
+      const deactivateReason = (payload.extra as Record<string, unknown>)?.reason as string ?? "";
+      console.log("[Webhook:deactivate] Status before deactivate:", statusBeforeDeactivate ?? "NOT_IN_DB");
+      console.log("[Webhook:deactivate] Reason:", deactivateReason);
+
+      const wasUpgradedOrDowngraded = statusBeforeDeactivate === "upgraded" || statusBeforeDeactivate === "downgraded";
+      if (wasUpgradedOrDowngraded) {
+        console.log("[Webhook:deactivate] Key was already", statusBeforeDeactivate, "— another key has taken over. Skipping Heimdall restore and Track cancel.");
+      }
+
       await storage.handleDeactivateEvent(partner.id, payload.license_key, webhookData);
       console.log("[Webhook:deactivate] Local DB updated — license deactivated");
 
-      // Move user to free plan on Heimdall
-      // Fetch the license data AFTER deactivation (Heimdall fields are preserved)
+      // If the key was upgraded/downgraded, just update DB status and return.
+      // Do NOT restore Heimdall or cancel subscription — the new key handles that.
+      if (wasUpgradedOrDowngraded) {
+        return res.json({ event: "deactivate", success: true, skippedRestore: true, reason: `Key was already ${statusBeforeDeactivate}` });
+      }
+
+      // Move user to free plan on Heimdall (only for actual refunds/cancellations)
       const deactivatedLicense = await storage.getLicenseByKey(payload.license_key);
       console.log("[Webhook:deactivate] License Heimdall data:", {
         heimdallWorkspaceId: deactivatedLicense?.heimdallWorkspaceId,
