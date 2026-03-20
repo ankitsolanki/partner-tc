@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { useSearch } from "wouter";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
 
-const PLATFORM_URL = "https://platform.tinycommand.com";
+const PLATFORM_URL = "https://app.tinycommand.com";
 const COUNTDOWN_SECS = 5;
 const TC_LOGO = "https://cdn-v1.tinycommand.com/1234567890/1771243665296/tinybox%20logo%20%281%29.png";
 
