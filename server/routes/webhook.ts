@@ -2,7 +2,7 @@ import { Router } from "express";
 import { validateHmacSignature } from "../utils/crypto";
 import { storage } from "../storage";
 import { updateWorkspacePlanForUser, addHeimdallUser, findHeimdallUser } from "../services/heimdall";
-import { updateAddOnCredits } from "../services/track";
+import { updateAddOnCredits, cancelSubscription } from "../services/track";
 import { z } from "zod";
 
 const router = Router();
@@ -339,10 +339,29 @@ router.post("/partner", async (req, res) => {
           });
         }
       } else {
-        console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping (user may not have redeemed)");
+        console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping Heimdall restore (user may not have redeemed)");
       }
 
-      return res.json({ event: "deactivate", success: true });
+      // Cancel subscription in tiny-track so monthly credit grants stop
+      let subscriptionCancelled = false;
+      if (deactivatedLicense?.heimdallWorkspaceId) {
+        try {
+          console.log("[Webhook:deactivate] Cancelling tiny-track subscription for workspace:", deactivatedLicense.heimdallWorkspaceId);
+          await cancelSubscription(
+            deactivatedLicense.heimdallWorkspaceId,
+            `AppSumo license deactivated/refunded (license_key: ${payload.license_key})`
+          );
+          subscriptionCancelled = true;
+          console.log("[Webhook:deactivate] Tiny-track subscription cancelled successfully");
+        } catch (err) {
+          console.error("[Webhook:deactivate] Tiny-track subscription cancel FAILED (non-blocking):", err);
+          // Non-blocking — Heimdall plan already restored. Subscription can be manually cancelled.
+        }
+      } else {
+        console.log("[Webhook:deactivate] No workspace ID — skipping tiny-track subscription cancel");
+      }
+
+      return res.json({ event: "deactivate", success: true, subscriptionCancelled });
     }
 
     case "migrate": {

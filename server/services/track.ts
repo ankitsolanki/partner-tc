@@ -121,6 +121,72 @@ async function updateSubscriptionCreditAllowance(
 }
 
 /**
+ * Cancel a subscription in tiny-track (used when AppSumo deactivates/refunds a license).
+ * Uses cancelType "immediate" so credits stop right away.
+ *
+ * @param workspaceId  Heimdall workspace ID = customerId in tiny-track
+ * @param reason       Reason for cancellation (logged in audit trail)
+ */
+export async function cancelSubscription(
+  workspaceId: string,
+  reason: string
+): Promise<void> {
+  console.log("[Track:cancel] ─── Cancelling subscription ───");
+  console.log("[Track:cancel] Workspace (customerId):", workspaceId);
+  console.log("[Track:cancel] Reason:", reason);
+  console.log("[Track:cancel] Track URL:", TRACK_BASE);
+
+  if (!TRACK_TOKEN) {
+    console.error("[Track:cancel] TRACK_API_TOKEN not configured — skipping subscription cancel");
+    throw new TrackError("TRACK_API_TOKEN not configured");
+  }
+
+  // 1. Find the subscription by customer (workspace) ID
+  console.log("[Track:cancel] Step 1: Looking up subscription for workspace:", workspaceId);
+  const sub = await getSubscriptionByCustomer(workspaceId);
+  if (!sub) {
+    console.log("[Track:cancel] No subscription found for workspace:", workspaceId, "— nothing to cancel");
+    return;
+  }
+  console.log("[Track:cancel] Found subscription:", sub.subscriptionId, "| plan:", sub.planId, "| creditAllowance:", sub.creditAllowance);
+
+  // 2. Cancel the subscription immediately
+  const url = `${TRACK_BASE}/api/subscription/${sub.subscriptionId}/cancel`;
+  const requestBody = {
+    reason,
+    cancelType: "immediate",
+  };
+
+  console.log("[Track:cancel] Step 2: POST", url);
+  console.log("[Track:cancel] Body:", JSON.stringify(requestBody));
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(requestBody),
+  });
+
+  console.log("[Track:cancel] Response status:", res.status);
+
+  if (!res.ok) {
+    const resBody = await res.text();
+    console.error("[Track:cancel] FAILED:", res.status, resBody.slice(0, 500));
+    throw new TrackError(`Failed to cancel subscription: HTTP ${res.status} — ${resBody.slice(0, 200)}`);
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Track:cancel] Response:", JSON.stringify(data).slice(0, 500));
+
+  if (data.success === false) {
+    const errMsg = (data.message as string) || "unknown error";
+    console.error("[Track:cancel] Cancel returned success:false:", errMsg);
+    throw new TrackError(`Subscription cancel failed: ${errMsg}`);
+  }
+
+  console.log("[Track:cancel] ─── SUCCESS — subscription", sub.subscriptionId, "cancelled for workspace", workspaceId, "───");
+}
+
+/**
  * Update the monthly credit allowance for a workspace after an AppSumo add-on change.
  *
  * Flow:
