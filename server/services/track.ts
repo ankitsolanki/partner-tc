@@ -22,43 +22,92 @@ function logConfig(): void {
   console.log("[Track:config] TRACK_API_TOKEN:", TRACK_TOKEN ? `set (${TRACK_TOKEN.length} chars, starts with: ${TRACK_TOKEN.slice(0, 20)}...)` : "NOT SET");
 }
 
-/**
- * Fetch the active subscription for a workspace (customer) from tiny-track.
- * Returns the subscription object including entitlements and planId.
- */
-async function getSubscriptionByCustomer(
+function logHeaders(headers: Record<string, string>): void {
+  console.log("[Track:headers]", JSON.stringify({
+    "Content-Type": headers["Content-Type"],
+    Authorization: headers.Authorization ? `Bearer ${headers.Authorization.replace("Bearer ", "").slice(0, 20)}...` : "NOT SET",
+  }));
+}
+
+// ─── Resolve workspace ID (externalId) to internal customerId ─────────────────
+// Workspace ID from Heimdall = externalId in tiny-track's customer model.
+// We must resolve it to the internal customerId before querying subscriptions.
+async function resolveCustomerId(
   workspaceId: string
+): Promise<{ customerId: string; organizationId: string } | null> {
+  const url = `${TRACK_BASE}/api/external/customers/${workspaceId}`;
+  const headers = authHeaders();
+
+  console.log("[Track:resolveCustomer] ─── Resolving externalId to customerId ───");
+  console.log("[Track:resolveCustomer] URL:", url);
+  console.log("[Track:resolveCustomer] Method: GET");
+  logHeaders(headers);
+
+  const res = await fetch(url, { headers });
+
+  console.log("[Track:resolveCustomer] Response status:", res.status);
+  console.log("[Track:resolveCustomer] Response content-type:", res.headers.get("content-type"));
+
+  if (!res.ok) {
+    const body = await res.text();
+    console.log("[Track:resolveCustomer] Response body (error):", body.slice(0, 500));
+    console.log("[Track:resolveCustomer] Customer not found for externalId:", workspaceId);
+    return null;
+  }
+
+  const data = (await res.json()) as Record<string, unknown>;
+  console.log("[Track:resolveCustomer] Response body:", JSON.stringify(data).slice(0, 800));
+
+  const customer = (data.data ?? data) as Record<string, unknown>;
+  const customerId = (customer._id ?? customer.id) as string | undefined;
+  const organizationId = customer.organizationId as string | undefined;
+
+  console.log("[Track:resolveCustomer] Parsed:", {
+    customerId: customerId ?? "MISSING",
+    organizationId: organizationId ?? "MISSING",
+    externalId: customer.externalId ?? "MISSING",
+    name: customer.name ?? "N/A",
+  });
+
+  if (!customerId) {
+    console.log("[Track:resolveCustomer] No customerId in response");
+    return null;
+  }
+
+  console.log("[Track:resolveCustomer] ─── SUCCESS — externalId", workspaceId, "→ customerId", customerId, "───");
+  return { customerId, organizationId: organizationId || "" };
+}
+
+// ─── Get subscription by internal customerId ──────────────────────────────────
+async function getSubscriptionByCustomer(
+  customerId: string
 ): Promise<{ subscriptionId: string; planId: string; creditAllowance: number } | null> {
-  const url = `${TRACK_BASE}/api/subscription/customer/${workspaceId}`;
+  const url = `${TRACK_BASE}/api/subscriptions/customer/${customerId}`;
   const headers = authHeaders();
 
   console.log("[Track:getSub] ─── GET Subscription by Customer ───");
   console.log("[Track:getSub] URL:", url);
   console.log("[Track:getSub] Method: GET");
-  console.log("[Track:getSub] Headers:", JSON.stringify({
-    "Content-Type": headers["Content-Type"],
-    Authorization: headers.Authorization ? `Bearer ${headers.Authorization.replace("Bearer ", "").slice(0, 20)}...` : "NOT SET",
-  }));
+  logHeaders(headers);
 
   const res = await fetch(url, { headers });
 
   console.log("[Track:getSub] Response status:", res.status);
-  console.log("[Track:getSub] Response headers content-type:", res.headers.get("content-type"));
+  console.log("[Track:getSub] Response content-type:", res.headers.get("content-type"));
 
   if (!res.ok) {
     const body = await res.text();
     console.log("[Track:getSub] Response body (error):", body.slice(0, 500));
-    console.log("[Track:getSub] FAILED — returning null (no subscription found)");
+    console.log("[Track:getSub] FAILED — returning null");
     return null;
   }
 
   const data = (await res.json()) as Record<string, unknown>;
   console.log("[Track:getSub] Response body:", JSON.stringify(data).slice(0, 800));
 
-  // The response shape is { success: true, data: { _id, planId, entitlements, ... } }
   const sub = (data.data ?? data) as Record<string, unknown>;
   const subscriptionId = (sub._id ?? sub.id) as string | undefined;
-  const planId = sub.planId as string | undefined;
+  const planId = (sub.planId as Record<string, unknown>)?._id as string ?? sub.planId as string | undefined;
   const entitlements = sub.entitlements as Record<string, unknown> | undefined;
   const creditAllowance = (entitlements?.creditAllowance as number) ?? 0;
 
@@ -70,7 +119,7 @@ async function getSubscriptionByCustomer(
   });
 
   if (!subscriptionId || !planId) {
-    console.log("[Track:getSub] No valid subscription in response for workspace:", workspaceId);
+    console.log("[Track:getSub] No valid subscription in response");
     return null;
   }
 
@@ -78,25 +127,20 @@ async function getSubscriptionByCustomer(
   return { subscriptionId, planId, creditAllowance };
 }
 
-/**
- * Fetch a plan from tiny-track to get its base creditAllowance.
- */
+// ─── Get plan's base creditAllowance ──────────────────────────────────────────
 async function getPlanCreditAllowance(planId: string): Promise<number> {
-  const url = `${TRACK_BASE}/api/subscription/plans/${planId}`;
+  const url = `${TRACK_BASE}/api/plans/${planId}`;
   const headers = authHeaders();
 
   console.log("[Track:getPlan] ─── GET Plan ───");
   console.log("[Track:getPlan] URL:", url);
   console.log("[Track:getPlan] Method: GET");
-  console.log("[Track:getPlan] Headers:", JSON.stringify({
-    "Content-Type": headers["Content-Type"],
-    Authorization: headers.Authorization ? `Bearer ${headers.Authorization.replace("Bearer ", "").slice(0, 20)}...` : "NOT SET",
-  }));
+  logHeaders(headers);
 
   const res = await fetch(url, { headers });
 
   console.log("[Track:getPlan] Response status:", res.status);
-  console.log("[Track:getPlan] Response headers content-type:", res.headers.get("content-type"));
+  console.log("[Track:getPlan] Response content-type:", res.headers.get("content-type"));
 
   if (!res.ok) {
     const body = await res.text();
@@ -115,14 +159,12 @@ async function getPlanCreditAllowance(planId: string): Promise<number> {
   return creditAllowance;
 }
 
-/**
- * Update a subscription's entitlements.creditAllowance in tiny-track.
- */
+// ─── Update subscription's entitlements.creditAllowance ───────────────────────
 async function updateSubscriptionCreditAllowance(
   subscriptionId: string,
   newCreditAllowance: number
 ): Promise<void> {
-  const url = `${TRACK_BASE}/api/subscription/${subscriptionId}`;
+  const url = `${TRACK_BASE}/api/subscriptions/${subscriptionId}`;
   const headers = authHeaders();
   const requestBody = {
     entitlements: {
@@ -133,10 +175,7 @@ async function updateSubscriptionCreditAllowance(
   console.log("[Track:updateSub] ─── PUT Update Subscription ───");
   console.log("[Track:updateSub] URL:", url);
   console.log("[Track:updateSub] Method: PUT");
-  console.log("[Track:updateSub] Headers:", JSON.stringify({
-    "Content-Type": headers["Content-Type"],
-    Authorization: headers.Authorization ? `Bearer ${headers.Authorization.replace("Bearer ", "").slice(0, 20)}...` : "NOT SET",
-  }));
+  logHeaders(headers);
   console.log("[Track:updateSub] Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
@@ -146,7 +185,7 @@ async function updateSubscriptionCreditAllowance(
   });
 
   console.log("[Track:updateSub] Response status:", res.status);
-  console.log("[Track:updateSub] Response headers content-type:", res.headers.get("content-type"));
+  console.log("[Track:updateSub] Response content-type:", res.headers.get("content-type"));
 
   if (!res.ok) {
     const resBody = await res.text();
@@ -164,50 +203,53 @@ async function updateSubscriptionCreditAllowance(
   console.log("[Track:updateSub] ─── SUCCESS — creditAllowance set to", newCreditAllowance, "───");
 }
 
-/**
- * Cancel a subscription in tiny-track (used when AppSumo deactivates/refunds a license).
- * Uses cancelType "immediate" so credits stop right away.
- */
+// ─── Cancel subscription (for deactivate/refund) ─────────────────────────────
 export async function cancelSubscription(
   workspaceId: string,
   reason: string
 ): Promise<void> {
   console.log("[Track:cancel] ═══════════════════════════════════════");
   console.log("[Track:cancel] Cancelling subscription");
-  console.log("[Track:cancel] Workspace (customerId):", workspaceId);
+  console.log("[Track:cancel] Workspace (externalId):", workspaceId);
   console.log("[Track:cancel] Reason:", reason);
   logConfig();
 
   if (!TRACK_TOKEN) {
-    console.error("[Track:cancel] TRACK_API_TOKEN not configured — skipping subscription cancel");
+    console.error("[Track:cancel] TRACK_API_TOKEN not configured — skipping");
     throw new TrackError("TRACK_API_TOKEN not configured");
   }
 
-  // 1. Find the subscription by customer (workspace) ID
-  console.log("[Track:cancel] Step 1/2: Looking up subscription...");
-  const sub = await getSubscriptionByCustomer(workspaceId);
+  // Step 1: Resolve externalId → customerId
+  console.log("[Track:cancel] Step 1/3: Resolving workspace to customerId...");
+  const customer = await resolveCustomerId(workspaceId);
+  if (!customer) {
+    console.log("[Track:cancel] Customer not found for workspace:", workspaceId, "— nothing to cancel");
+    console.log("[Track:cancel] ═══════════════════════════════════════");
+    return;
+  }
+
+  // Step 2: Find the subscription
+  console.log("[Track:cancel] Step 2/3: Looking up subscription for customerId:", customer.customerId);
+  const sub = await getSubscriptionByCustomer(customer.customerId);
   if (!sub) {
-    console.log("[Track:cancel] No subscription found for workspace:", workspaceId, "— nothing to cancel");
+    console.log("[Track:cancel] No subscription found — nothing to cancel");
     console.log("[Track:cancel] ═══════════════════════════════════════");
     return;
   }
   console.log("[Track:cancel] Found subscription:", sub.subscriptionId, "| plan:", sub.planId, "| creditAllowance:", sub.creditAllowance);
 
-  // 2. Cancel the subscription immediately
-  const url = `${TRACK_BASE}/api/subscription/${sub.subscriptionId}/cancel`;
+  // Step 3: Cancel the subscription immediately
+  const url = `${TRACK_BASE}/api/subscriptions/${sub.subscriptionId}/cancel`;
   const headers = authHeaders();
   const requestBody = {
     reason,
     cancelType: "immediate",
   };
 
-  console.log("[Track:cancel] Step 2/2: Cancelling subscription...");
+  console.log("[Track:cancel] Step 3/3: Cancelling subscription...");
   console.log("[Track:cancel] URL:", url);
   console.log("[Track:cancel] Method: POST");
-  console.log("[Track:cancel] Headers:", JSON.stringify({
-    "Content-Type": headers["Content-Type"],
-    Authorization: headers.Authorization ? `Bearer ${headers.Authorization.replace("Bearer ", "").slice(0, 20)}...` : "NOT SET",
-  }));
+  logHeaders(headers);
   console.log("[Track:cancel] Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
@@ -217,7 +259,7 @@ export async function cancelSubscription(
   });
 
   console.log("[Track:cancel] Response status:", res.status);
-  console.log("[Track:cancel] Response headers content-type:", res.headers.get("content-type"));
+  console.log("[Track:cancel] Response content-type:", res.headers.get("content-type"));
 
   if (!res.ok) {
     const resBody = await res.text();
@@ -238,16 +280,7 @@ export async function cancelSubscription(
   console.log("[Track:cancel] SUCCESS — subscription", sub.subscriptionId, "cancelled for workspace", workspaceId);
 }
 
-/**
- * Update the monthly credit allowance for a workspace after an AppSumo add-on change.
- *
- * Flow:
- * 1. Fetch the subscription by workspace (customer) ID
- * 2. Fetch the base plan to get its creditAllowance
- * 3. Calculate new total: basePlanCredits + (unitQuantity × 50,000)
- * 4. Update the subscription's entitlements.creditAllowance
- * 5. Tiny-track's cron automatically applies this on the next monthly reset
- */
+// ─── Update monthly credit allowance (for add-on units) ──────────────────────
 export async function updateAddOnCredits(
   workspaceId: string,
   unitQuantity: number,
@@ -255,7 +288,7 @@ export async function updateAddOnCredits(
 ): Promise<void> {
   console.log("[Track:addOn] ═══════════════════════════════════════");
   console.log("[Track:addOn] Updating add-on credit allowance");
-  console.log("[Track:addOn] Workspace:", workspaceId);
+  console.log("[Track:addOn] Workspace (externalId):", workspaceId);
   console.log("[Track:addOn] Unit quantity:", unitQuantity, "(each =", CREDITS_PER_UNIT, "credits/month)");
   console.log("[Track:addOn] Tier:", tier);
   logConfig();
@@ -265,22 +298,30 @@ export async function updateAddOnCredits(
     throw new TrackError("TRACK_API_TOKEN not configured");
   }
 
-  // 1. Get current subscription
-  console.log("[Track:addOn] Step 1/3: Looking up subscription...");
-  const sub = await getSubscriptionByCustomer(workspaceId);
-  if (!sub) {
-    console.error("[Track:addOn] No subscription found for workspace:", workspaceId);
-    throw new TrackError(`No subscription found for workspace ${workspaceId}`);
+  // Step 1: Resolve externalId → customerId
+  console.log("[Track:addOn] Step 1/4: Resolving workspace to customerId...");
+  const customer = await resolveCustomerId(workspaceId);
+  if (!customer) {
+    console.error("[Track:addOn] Customer not found for workspace:", workspaceId);
+    throw new TrackError(`Customer not found for workspace ${workspaceId}`);
   }
 
-  // 2. Get the base plan's creditAllowance
-  console.log("[Track:addOn] Step 2/3: Fetching base plan...");
+  // Step 2: Get current subscription
+  console.log("[Track:addOn] Step 2/4: Looking up subscription for customerId:", customer.customerId);
+  const sub = await getSubscriptionByCustomer(customer.customerId);
+  if (!sub) {
+    console.error("[Track:addOn] No subscription found for customerId:", customer.customerId);
+    throw new TrackError(`No subscription found for customer ${customer.customerId}`);
+  }
+
+  // Step 3: Get the base plan's creditAllowance
+  console.log("[Track:addOn] Step 3/4: Fetching base plan:", sub.planId);
   const baseCreditAllowance = await getPlanCreditAllowance(sub.planId);
 
-  // 3. Calculate new total
+  // Step 4: Calculate and update
   const addOnCredits = unitQuantity * CREDITS_PER_UNIT;
   const newCreditAllowance = baseCreditAllowance + addOnCredits;
-  console.log("[Track:addOn] Step 3/3: Updating subscription...");
+  console.log("[Track:addOn] Step 4/4: Updating subscription...");
   console.log("[Track:addOn] Credit calculation:", {
     basePlanCredits: baseCreditAllowance,
     addOnUnits: unitQuantity,
@@ -288,7 +329,6 @@ export async function updateAddOnCredits(
     newTotalAllowance: newCreditAllowance,
   });
 
-  // 4. Update the subscription
   await updateSubscriptionCreditAllowance(sub.subscriptionId, newCreditAllowance);
 
   console.log("[Track:addOn] ═══════════════════════════════════════");
