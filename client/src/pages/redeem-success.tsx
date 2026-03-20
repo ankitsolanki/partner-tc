@@ -8,7 +8,7 @@ const TC_LOGO = "https://cdn-v1.tinycommand.com/1234567890/1771243665296/tinybox
 
 function getRedirectUrl(email: string | null, isNewUser: boolean): string {
   if (isNewUser && email) {
-    return `${PLATFORM_URL}/login?login_hint=${encodeURIComponent(email)}`;
+    return `${PLATFORM_URL}`;
   }
   return PLATFORM_URL;
 }
