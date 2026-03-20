@@ -1,4 +1,4 @@
-import { randomBytes } from "crypto";
+import { log, verbose, error } from "../utils/logger";
 
 const HEIMDALL_BASE = process.env.HEIMDALL_API_URL || "https://heimdallapi.tinycommand.com";
 
@@ -40,12 +40,12 @@ async function registerKeycloakUser(
   lastName: string,
   password: string
 ): Promise<{ alreadyExisted: boolean }> {
+  const P = "Heimdall:1-register";
   const url = `${HEIMDALL_BASE}/service/public/v0/external/keycloak/admin/register-user`;
 
-  console.log("[Heimdall:1-register] ─── Registering user on Keycloak ───");
-  console.log("[Heimdall:1-register] URL:", url);
-  console.log("[Heimdall:1-register] Email:", email);
-  console.log("[Heimdall:1-register] Name:", firstName, lastName);
+  log(P, "Registering user on Keycloak", email);
+  verbose(P, "URL:", url);
+  verbose(P, "Name:", `${firstName} ${lastName}`);
 
   const requestBody = {
     email,
@@ -61,7 +61,7 @@ async function registerKeycloakUser(
       },
     ],
   };
-  console.log("[Heimdall:1-register] Request body (password redacted):", JSON.stringify({ ...requestBody, credentials: "[REDACTED]" }));
+  verbose(P, "Request body (password redacted):", JSON.stringify({ ...requestBody, credentials: "[REDACTED]" }));
 
   const res = await fetch(url, {
     method: "POST",
@@ -69,24 +69,24 @@ async function registerKeycloakUser(
     body: JSON.stringify(requestBody),
   });
 
-  console.log("[Heimdall:1-register] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (res.status === 409) {
-    console.log("[Heimdall:1-register] User already exists on Keycloak (HTTP 409) — continuing");
+    log(P, "User already exists on Keycloak (HTTP 409) — continuing");
     return { alreadyExisted: true };
   }
 
   const responseBody = await res.text();
-  console.log("[Heimdall:1-register] Response body:", responseBody);
+  verbose(P, "Response body:", responseBody);
 
   // Heimdall wraps errors in HTTP 200 with status:"failed"
   try {
     const parsed = JSON.parse(responseBody);
     if (parsed.status === "failed") {
       const errorMsg = parsed.result?.error?.errorMessage || parsed.result?.message || "";
-      console.log("[Heimdall:1-register] Heimdall returned status:failed. Error:", errorMsg);
+      log(P, "Heimdall returned status:failed. Error:", errorMsg);
       if (errorMsg.toLowerCase().includes("user exists") || parsed.result?.error?.status_code === 409) {
-        console.log("[Heimdall:1-register] User already exists (detected from response body) — continuing");
+        log(P, "User already exists (detected from response body) — continuing");
         return { alreadyExisted: true };
       }
       throw new HeimdallError("register", `Keycloak register failed: ${errorMsg}`);
@@ -97,11 +97,11 @@ async function registerKeycloakUser(
   }
 
   if (!res.ok) {
-    console.error("[Heimdall:1-register] FAILED:", res.status, responseBody);
+    error(P, "FAILED:", `${res.status} ${responseBody}`);
     throw new HeimdallError("register", `Failed to register user on Keycloak: ${res.status}`);
   }
 
-  console.log("[Heimdall:1-register] SUCCESS — user created");
+  log(P, "SUCCESS — user created");
   return { alreadyExisted: false };
 }
 
@@ -111,10 +111,11 @@ export async function addHeimdallUser(
   firstName: string,
   lastName: string
 ): Promise<{ token: string; userId: string }> {
+  const P = "Heimdall:2-addUser";
   const url = `${HEIMDALL_BASE}/service/v0/user/add`;
 
-  console.log("[Heimdall:2-addUser] ─── Adding user to Heimdall MongoDB ───");
-  console.log("[Heimdall:2-addUser] URL:", url);
+  log(P, "Adding user to Heimdall MongoDB", email);
+  verbose(P, "URL:", url);
 
   // Heimdall's user/add service requires `name` to be truthy (validation check).
   // The User model's add method handles first_name/last_name smartly:
@@ -137,7 +138,7 @@ export async function addHeimdallUser(
     // so the model preserves existing values for known users.
     requestBody.name = email.split("@")[0];
   }
-  console.log("[Heimdall:2-addUser] Request body:", JSON.stringify(requestBody));
+  verbose(P, "Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
     method: "POST",
@@ -145,40 +146,40 @@ export async function addHeimdallUser(
     body: JSON.stringify(requestBody),
   });
 
-  console.log("[Heimdall:2-addUser] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall:2-addUser] FAILED:", res.status, body);
+    error(P, "FAILED:", `${res.status} ${body}`);
     throw new HeimdallError("add_user", `Failed to add user to Heimdall: ${res.status} — ${body}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  console.log("[Heimdall:2-addUser] Response keys:", Object.keys(data));
-  console.log("[Heimdall:2-addUser] Full response:", JSON.stringify(data).slice(0, 500));
+  verbose(P, "Response keys:", Object.keys(data));
+  verbose(P, "Full response:", JSON.stringify(data).slice(0, 500));
 
   const result = data.result as Record<string, unknown> | undefined;
 
-  console.log("[Heimdall:2-addUser] Result object keys:", result ? Object.keys(result) : "NO RESULT");
+  verbose(P, "Result object keys:", result ? Object.keys(result) : "NO RESULT");
 
   // Token can be at data.token OR data.result.token (Heimdall nests it inside result)
   const token = (data.token ?? result?.token) as string | undefined;
   const userId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
 
-  console.log("[Heimdall:2-addUser] Token present:", !!token, "| found at:", data.token ? "data.token" : result?.token ? "result.token" : "NOWHERE");
-  console.log("[Heimdall:2-addUser] Extracted userId:", userId);
+  verbose(P, "Token present:", `${!!token} | found at: ${data.token ? "data.token" : result?.token ? "result.token" : "NOWHERE"}`);
+  verbose(P, "Extracted userId:", userId);
 
   if (!token) {
-    console.error("[Heimdall:2-addUser] No token in response! Full data:", JSON.stringify(data));
+    error(P, "No token in response!", JSON.stringify(data));
     throw new HeimdallError("add_user", "No token returned from Heimdall user/add");
   }
 
   if (!userId) {
-    console.error("[Heimdall:2-addUser] No user ID in response! Full data:", JSON.stringify(data));
+    error(P, "No user ID in response!", JSON.stringify(data));
     throw new HeimdallError("add_user", "No user ID returned from Heimdall user/add");
   }
 
-  console.log("[Heimdall:2-addUser] SUCCESS:", { userId, email, tokenLength: token.length });
+  log(P, "SUCCESS", { userId, email, tokenLength: token.length });
   return { token, userId };
 }
 
@@ -193,61 +194,61 @@ async function findRootWorkspace(
   ownerId: string,
   token: string
 ): Promise<WorkspaceInfo | null> {
+  const P = "Heimdall:3-findWorkspace";
   const params = new URLSearchParams({ owner_id: ownerId, return_root: "true" });
   const url = `${HEIMDALL_BASE}/service/v0/workspace/find/one?${params.toString()}`;
 
-  console.log("[Heimdall:3-findWorkspace] ─── Finding root workspace ───");
-  console.log("[Heimdall:3-findWorkspace] URL:", url);
-  console.log("[Heimdall:3-findWorkspace] Owner ID:", ownerId);
-  console.log("[Heimdall:3-findWorkspace] Token (first 20):", token.slice(0, 20) + "...");
+  log(P, "Finding root workspace for owner:", ownerId);
+  verbose(P, "URL:", url);
+  verbose(P, "Token (first 20):", token.slice(0, 20) + "...");
 
   const res = await fetch(url, {
     method: "GET",
     headers: { token },
   });
 
-  console.log("[Heimdall:3-findWorkspace] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.log("[Heimdall:3-findWorkspace] Not OK:", res.status, body);
+    verbose(P, "Not OK:", `${res.status} ${body}`);
     if (res.status === 404) {
-      console.log("[Heimdall:3-findWorkspace] No workspace found (404) — will create new");
+      log(P, "No workspace found (404) — will create new");
       return null;
     }
-    console.error("[Heimdall:3-findWorkspace] Unexpected error — will create new workspace");
+    error(P, "Unexpected error — will create new workspace");
     return null;
   }
 
   const data = (await res.json()) as Record<string, unknown>;
   const result = data.result as Record<string, unknown> | undefined;
-  console.log("[Heimdall:3-findWorkspace] Response keys:", Object.keys(data));
-  console.log("[Heimdall:3-findWorkspace] Full response:", JSON.stringify(data).slice(0, 800));
+  verbose(P, "Response keys:", Object.keys(data));
+  verbose(P, "Full response:", JSON.stringify(data).slice(0, 800));
   if (result) {
-    console.log("[Heimdall:3-findWorkspace] *** WORKSPACE PLAN STATE ***");
-    console.log("[Heimdall:3-findWorkspace]   plan_id:", result.plan_id ?? "NULL");
-    console.log("[Heimdall:3-findWorkspace]   type:", result.type ?? "NULL");
-    console.log("[Heimdall:3-findWorkspace]   license_code:", result.license_code ?? "NULL");
-    console.log("[Heimdall:3-findWorkspace]   license_provider:", result.license_provider ?? "NULL");
-    console.log("[Heimdall:3-findWorkspace] *** END PLAN STATE ***");
+    verbose(P, "WORKSPACE PLAN STATE:", {
+      plan_id: result.plan_id ?? "NULL",
+      type: result.type ?? "NULL",
+      license_code: result.license_code ?? "NULL",
+      license_provider: result.license_provider ?? "NULL",
+    });
   }
 
   // Heimdall returns 200 with status:"failed" when no workspace found
   if (data.status === "failed") {
-    console.log("[Heimdall:3-findWorkspace] Heimdall returned status:failed —", result?.message || "no workspace");
+    log(P, "Heimdall returned status:failed —", (result?.message as string) || "no workspace");
     return null;
   }
 
   const workspaceId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
-    console.log("[Heimdall:3-findWorkspace] No workspace ID in response — will create new");
+    log(P, "No workspace ID in response — will create new");
     return null;
   }
 
   const planId = (result?.plan_id as string) || null;
   const planType = (result?.type as string) || null;
-  console.log("[Heimdall:3-findWorkspace] SUCCESS — found workspace:", workspaceId, "| current plan_id:", planId, "| type:", planType);
+  log(P, "SUCCESS — found workspace:", `${workspaceId} | plan_id: ${planId} | type: ${planType}`);
   return { workspaceId, planId, planType };
 }
 
@@ -263,11 +264,11 @@ async function addWorkspacePlan(
     planType: string;
   }
 ): Promise<string> {
+  const P = "Heimdall:4-addWorkspace";
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
 
-  console.log("[Heimdall:4-addWorkspace] ─── Adding workspace/plan ───");
-  console.log("[Heimdall:4-addWorkspace] URL:", url);
-  console.log("[Heimdall:4-addWorkspace] Mode:", params.workspaceId ? "UPDATE existing" : "CREATE new");
+  log(P, "Adding workspace/plan", params.workspaceId ? "UPDATE existing" : "CREATE new");
+  verbose(P, "URL:", url);
 
   const body: Record<string, unknown> = {
     owner_id: params.ownerId,
@@ -282,7 +283,7 @@ async function addWorkspacePlan(
     body._id = params.workspaceId;
   }
 
-  console.log("[Heimdall:4-addWorkspace] Request body:", JSON.stringify(body));
+  verbose(P, "Request body:", JSON.stringify(body));
 
   const res = await fetch(url, {
     method: "POST",
@@ -290,22 +291,22 @@ async function addWorkspacePlan(
     body: JSON.stringify(body),
   });
 
-  console.log("[Heimdall:4-addWorkspace] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const resBody = await res.text();
-    console.error("[Heimdall:4-addWorkspace] FAILED:", res.status, resBody);
+    error(P, "FAILED:", `${res.status} ${resBody}`);
     throw new HeimdallError("add_workspace", `Failed to add workspace/plan: ${res.status} — ${resBody}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
   const result = data.result as Record<string, unknown> | undefined;
-  console.log("[Heimdall:4-addWorkspace] Response keys:", Object.keys(data));
-  console.log("[Heimdall:4-addWorkspace] Full response:", JSON.stringify(data).slice(0, 500));
+  verbose(P, "Response keys:", Object.keys(data));
+  verbose(P, "Full response:", JSON.stringify(data).slice(0, 500));
 
   if (data.status === "failed") {
     const errMsg = (result?.message as string) || "Unknown error";
-    console.error("[Heimdall:4-addWorkspace] Heimdall returned status:failed:", errMsg);
+    error(P, "Heimdall returned status:failed:", errMsg);
     throw new HeimdallError("add_workspace", `Heimdall workspace/add failed: ${errMsg}`);
   }
 
@@ -313,21 +314,21 @@ async function addWorkspacePlan(
   const workspaceId = (result?._id ?? result?.id ?? data._id ?? data.id) as string | undefined;
 
   if (!workspaceId) {
-    console.error("[Heimdall:4-addWorkspace] No workspace ID in response:", JSON.stringify(data));
+    error(P, "No workspace ID in response:", JSON.stringify(data));
     throw new HeimdallError("add_workspace", "No workspace ID returned from Heimdall");
   }
 
-  console.log("[Heimdall:4-addWorkspace] SUCCESS — workspace:", workspaceId);
+  log(P, "SUCCESS — workspace:", workspaceId);
   return workspaceId;
 }
 
 // ─── Step 5: Trigger forgot password email ────────────────────────────────────
 async function triggerForgotPassword(email: string): Promise<void> {
+  const P = "Heimdall:5-forgotPwd";
   const url = `${HEIMDALL_BASE}/service/public/v0/user/forgot/password`;
 
-  console.log("[Heimdall:5-forgotPwd] ─── Triggering forgot password ───");
-  console.log("[Heimdall:5-forgotPwd] URL:", url);
-  console.log("[Heimdall:5-forgotPwd] Email:", email);
+  log(P, "Triggering forgot password", email);
+  verbose(P, "URL:", url);
 
   const res = await fetch(url, {
     method: "POST",
@@ -335,14 +336,15 @@ async function triggerForgotPassword(email: string): Promise<void> {
     body: JSON.stringify({ email_id: email }),
   });
 
-  console.log("[Heimdall:5-forgotPwd] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall:5-forgotPwd] FAILED (non-critical):", res.status, body);
+    error(P, "FAILED (non-critical):", `${res.status} ${body}`);
   } else {
     const body = await res.text();
-    console.log("[Heimdall:5-forgotPwd] SUCCESS:", body.slice(0, 200));
+    log(P, "SUCCESS");
+    verbose(P, "Response:", body.slice(0, 200));
   }
 }
 
@@ -351,9 +353,11 @@ async function triggerForgotPassword(email: string): Promise<void> {
 // We include { sub: "service" } so that endpoints requiring decoded.user_id
 // (like user/find/one) accept the token — Heimdall sets user_id = decoded.sub.
 export async function getServiceToken(): Promise<string> {
+  const P = "Heimdall:serviceToken";
   const url = `${HEIMDALL_BASE}/service/v0/get/signed/token`;
 
-  console.log("[Heimdall:serviceToken] Getting service token from:", url);
+  log(P, "Getting service token");
+  verbose(P, "URL:", url);
 
   const res = await fetch(url, {
     method: "POST",
@@ -365,11 +369,11 @@ export async function getServiceToken(): Promise<string> {
     body: JSON.stringify({ sub: "service" }),
   });
 
-  console.log("[Heimdall:serviceToken] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall:serviceToken] FAILED:", res.status, body);
+    error(P, "FAILED:", `${res.status} ${body}`);
     throw new HeimdallError("service_token", `Failed to get service token: ${res.status}`);
   }
 
@@ -378,11 +382,12 @@ export async function getServiceToken(): Promise<string> {
   const token = (data.token ?? result?.token ?? data.access_token ?? result?.access_token) as string | undefined;
 
   if (!token) {
-    console.error("[Heimdall:serviceToken] No token in response:", JSON.stringify(data));
+    error(P, "No token in response:", JSON.stringify(data));
     throw new HeimdallError("service_token", "No token in service token response");
   }
 
-  console.log("[Heimdall:serviceToken] SUCCESS — token length:", token.length, "| found at:", data.token ? "data.token" : "result.token");
+  log(P, "SUCCESS");
+  verbose(P, "Token length:", `${token.length} | found at: ${data.token ? "data.token" : "result.token"}`);
   return token;
 }
 
@@ -391,33 +396,33 @@ export async function getServiceToken(): Promise<string> {
 export async function findHeimdallUser(
   email: string
 ): Promise<{ firstName: string; lastName: string; name: string; userId: string } | null> {
-  console.log("[Heimdall:findUser] ─── Looking up user by email ───");
-  console.log("[Heimdall:findUser] Email:", email);
+  const P = "Heimdall:findUser";
+  log(P, "Looking up user by email", email);
 
   try {
     const serviceToken = await getServiceToken();
 
     const params = new URLSearchParams({ email_id: email });
     const url = `${HEIMDALL_BASE}/service/v0/user/find/one?${params.toString()}`;
-    console.log("[Heimdall:findUser] URL:", url);
+    verbose(P, "URL:", url);
 
     const res = await fetch(url, {
       method: "GET",
       headers: { token: serviceToken },
     });
 
-    console.log("[Heimdall:findUser] Response status:", res.status);
+    verbose(P, "Response status:", res.status);
 
     if (!res.ok) {
-      console.log("[Heimdall:findUser] HTTP error:", res.status, "— user may not exist");
+      log(P, "HTTP error — user may not exist", res.status);
       return null;
     }
 
     const data = (await res.json()) as Record<string, unknown>;
-    console.log("[Heimdall:findUser] Response:", JSON.stringify(data).slice(0, 500));
+    verbose(P, "Response:", JSON.stringify(data).slice(0, 500));
 
     if (data.status === "failed") {
-      console.log("[Heimdall:findUser] Heimdall returned status:failed — user not found");
+      log(P, "Heimdall returned status:failed — user not found");
       return null;
     }
 
@@ -427,16 +432,16 @@ export async function findHeimdallUser(
     const name = (result?.name as string) || "";
     const userId = (result?._id ?? result?.id) as string | undefined;
 
-    console.log("[Heimdall:findUser] Found user:", { userId, name, firstName, lastName });
+    log(P, "Found user", { userId, name, firstName, lastName });
 
     if (!userId) {
-      console.log("[Heimdall:findUser] No user ID in response — treating as not found");
+      log(P, "No user ID in response — treating as not found");
       return null;
     }
 
     return { firstName, lastName, name, userId };
   } catch (err) {
-    console.error("[Heimdall:findUser] Error looking up user (non-fatal):", err);
+    error(P, "Error looking up user (non-fatal):", err);
     return null;
   }
 }
@@ -450,30 +455,28 @@ export async function updateWorkspacePlanForUser(
   licenseKey: string,
   redeemerEmail: string
 ): Promise<void> {
-  console.log("[Heimdall:updatePlan] ─── Updating workspace plan ───");
-  console.log("[Heimdall:updatePlan] Workspace:", workspaceId);
-  console.log("[Heimdall:updatePlan] Tier:", tier, "| License:", licenseKey.slice(0, 8) + "...");
-  console.log("[Heimdall:updatePlan] Redeemer email:", redeemerEmail);
+  const P = "Heimdall:updatePlan";
+  log(P, "Updating workspace plan", { workspaceId, tier, redeemerEmail });
 
   const planId = PLAN_ID_MAP[tier];
   const planType = PLAN_TYPE_MAP[tier];
   if (!planId || !planType) {
-    console.error("[Heimdall:updatePlan] Unknown tier:", tier);
+    error(P, "Unknown tier:", tier);
     return;
   }
 
   // Step 1: Fetch existing user to get their real name
-  console.log("[Heimdall:updatePlan] Fetching existing user from Heimdall...");
+  log(P, "Fetching existing user from Heimdall...");
   const existingUser = await findHeimdallUser(redeemerEmail);
 
   const firstName = existingUser?.firstName || "";
   const lastName = existingUser?.lastName || "";
-  console.log("[Heimdall:updatePlan] User lookup result:", existingUser ? { firstName, lastName, name: existingUser.name } : "NOT_FOUND");
+  verbose(P, "User lookup result:", existingUser ? { firstName, lastName, name: existingUser.name } : "NOT_FOUND");
 
   // Step 2: Get user token via user/add (upsert) with the real name
-  console.log("[Heimdall:updatePlan] Getting user token via user/add...");
+  log(P, "Getting user token via user/add...");
   const { token } = await addHeimdallUser(redeemerEmail, firstName, lastName);
-  console.log("[Heimdall:updatePlan] Got user token (length:", token.length, ")");
+  verbose(P, "Got user token, length:", token.length);
 
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
   const requestBody = {
@@ -483,7 +486,7 @@ export async function updateWorkspacePlanForUser(
     plan_id: planId,
     type: planType,
   };
-  console.log("[Heimdall:updatePlan] Request body:", JSON.stringify(requestBody));
+  verbose(P, "Request body:", JSON.stringify(requestBody));
 
   const res = await fetch(url, {
     method: "POST",
@@ -491,25 +494,25 @@ export async function updateWorkspacePlanForUser(
     body: JSON.stringify(requestBody),
   });
 
-  console.log("[Heimdall:updatePlan] Response status:", res.status);
+  verbose(P, "Response status:", res.status);
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[Heimdall:updatePlan] HTTP FAILED:", res.status, body);
+    error(P, "HTTP FAILED:", `${res.status} ${body}`);
     throw new HeimdallError("update_plan", `Failed to update workspace plan: ${res.status}`);
   }
 
   const data = (await res.json()) as Record<string, unknown>;
-  console.log("[Heimdall:updatePlan] Response:", JSON.stringify(data).slice(0, 500));
+  verbose(P, "Response:", JSON.stringify(data).slice(0, 500));
 
   if (data.status === "failed") {
     const result = data.result as Record<string, unknown> | undefined;
     const errMsg = (result?.message as string) || "Unknown error";
-    console.error("[Heimdall:updatePlan] Heimdall returned status:failed:", errMsg);
+    error(P, "Heimdall returned status:failed:", errMsg);
     throw new HeimdallError("update_plan", `Heimdall workspace update failed: ${errMsg}`);
   }
 
-  console.log("[Heimdall:updatePlan] SUCCESS — workspace plan updated:", { workspaceId, tier, planId });
+  log(P, "SUCCESS — workspace plan updated", { workspaceId, tier, planId });
 }
 
 // ─── Orchestrator ─────────────────────────────────────────────────────────────
@@ -521,58 +524,43 @@ export async function provisionAccount(
   licenseKey: string,
   password: string
 ): Promise<ProvisioningResult> {
-  console.log("[Heimdall:provision] ════════════════════════════════════════");
-  console.log("[Heimdall:provision] Starting account provisioning");
-  console.log("[Heimdall:provision] Email:", email);
-  console.log("[Heimdall:provision] Name:", firstName, lastName);
-  console.log("[Heimdall:provision] Tier:", tier);
-  console.log("[Heimdall:provision] License:", licenseKey.slice(0, 8) + "...");
-  console.log("[Heimdall:provision] Password provided: YES (length:", password.length, ")");
-  console.log("[Heimdall:provision] HEIMDALL_BASE:", HEIMDALL_BASE);
-  console.log("[Heimdall:provision] ════════════════════════════════════════");
+  const P = "Heimdall:provision";
+  log(P, "Starting account provisioning", { email, tier });
+  verbose(P, "Name:", `${firstName} ${lastName}`);
+  verbose(P, "License:", licenseKey.slice(0, 8) + "...");
+  verbose(P, "Password length:", password.length);
+  verbose(P, "HEIMDALL_BASE:", HEIMDALL_BASE);
 
   const planId = PLAN_ID_MAP[tier];
   const planType = PLAN_TYPE_MAP[tier];
   if (!planId || !planType) {
     throw new HeimdallError("validation", `Unknown tier: ${tier}`);
   }
-  console.log("[Heimdall:provision] Plan mapping:", { planId, planType });
-
-  const STEP_DELAY_MS = 10_000;
-  const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+  verbose(P, "Plan mapping:", { planId, planType });
 
   // Step 1: Register on Keycloak (using user-provided password)
-  console.log("[Heimdall:provision] >>> Step 1/5: Register on Keycloak");
+  log(P, "Step 1/5: Register on Keycloak");
   const { alreadyExisted } = await registerKeycloakUser(email, firstName, lastName, password);
-  console.log("[Heimdall:provision] <<< Step 1 done. alreadyExisted:", alreadyExisted);
-
-  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 2...");
-  await delay(STEP_DELAY_MS);
+  log(P, "Step 1 done. alreadyExisted:", alreadyExisted);
 
   // Step 2: Add/upsert in Heimdall MongoDB
-  console.log("[Heimdall:provision] >>> Step 2/5: Add user to Heimdall");
+  log(P, "Step 2/5: Add user to Heimdall");
   const { token, userId } = await addHeimdallUser(email, firstName, lastName);
-  console.log("[Heimdall:provision] <<< Step 2 done. userId:", userId);
-
-  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 3...");
-  await delay(STEP_DELAY_MS);
+  log(P, "Step 2 done. userId:", userId);
 
   // Step 3: Find existing root workspace and capture current plan
-  console.log("[Heimdall:provision] >>> Step 3/5: Find root workspace");
+  log(P, "Step 3/5: Find root workspace");
   const existingWorkspace = await findRootWorkspace(userId, token);
   const previousPlanId = existingWorkspace?.planId ?? null;
   const previousPlanType = existingWorkspace?.planType ?? null;
-  console.log("[Heimdall:provision] <<< Step 3 done. workspace:", existingWorkspace?.workspaceId ?? "NONE", "| previousPlan:", previousPlanId, previousPlanType);
-
-  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 4...");
-  await delay(STEP_DELAY_MS);
+  log(P, "Step 3 done.", `workspace: ${existingWorkspace?.workspaceId ?? "NONE"} | previousPlan: ${previousPlanId} ${previousPlanType}`);
 
   // Step 4: Add/update workspace with plan
-  console.log("[Heimdall:provision] >>> Step 4/5: Add workspace/plan");
+  log(P, "Step 4/5: Add workspace/plan");
   const workspaceName = firstName
     ? `${firstName}'s Workspace`
     : "Your Workspace";
-  console.log("[Heimdall:provision] Workspace name:", workspaceName);
+  verbose(P, "Workspace name:", workspaceName);
 
   const workspaceId = await addWorkspacePlan(token, {
     workspaceId: existingWorkspace?.workspaceId ?? null,
@@ -582,20 +570,12 @@ export async function provisionAccount(
     planId,
     planType,
   });
-  console.log("[Heimdall:provision] <<< Step 4 done. workspaceId:", workspaceId);
-
-  console.log("[Heimdall:provision] Waiting", STEP_DELAY_MS / 1000, "s before step 5...");
-  await delay(STEP_DELAY_MS);
+  log(P, "Step 4 done. workspaceId:", workspaceId);
 
   // Step 5: No longer needed — user provides their own password in the signup form
-  console.log("[Heimdall:provision] >>> Step 5/5: SKIPPED (user set password in signup form)");
+  log(P, "Step 5/5: SKIPPED (user set password in signup form)");
 
-  console.log("[Heimdall:provision] ════════════════════════════════════════");
-  console.log("[Heimdall:provision] PROVISIONING COMPLETE");
-  console.log("[Heimdall:provision] userId:", userId);
-  console.log("[Heimdall:provision] workspaceId:", workspaceId);
-  console.log("[Heimdall:provision] isNewUser:", !alreadyExisted);
-  console.log("[Heimdall:provision] ════════════════════════════════════════");
+  log(P, "PROVISIONING COMPLETE", { userId, workspaceId, isNewUser: !alreadyExisted });
 
   return {
     heimdallUserId: userId,

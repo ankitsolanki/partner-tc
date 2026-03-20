@@ -4,6 +4,7 @@ import { storage } from "../storage";
 import { updateWorkspacePlanForUser, addHeimdallUser, findHeimdallUser } from "../services/heimdall";
 import { updateAddOnCredits, cancelSubscription } from "../services/track";
 import { z } from "zod";
+import { log, verbose, error } from "../utils/logger";
 
 const router = Router();
 
@@ -27,15 +28,15 @@ const webhookPayloadSchema = z.object({
 });
 
 router.post("/partner", async (req, res) => {
-  console.log("[Webhook] ─── POST /api/webhooks/partner ───");
-  console.log("[Webhook] Full request body:", JSON.stringify(req.body));
-  console.log("[Webhook] Headers:", JSON.stringify({
+  log("Webhook", "POST /api/webhooks/partner");
+  verbose("Webhook", "Full request body:", JSON.stringify(req.body));
+  verbose("Webhook", "Headers:", JSON.stringify({
     "x-webhook-signature": req.headers["x-webhook-signature"] ? "present" : "missing",
     "x-webhook-timestamp": req.headers["x-webhook-timestamp"],
     "x-partner-name": req.headers["x-partner-name"],
     "content-type": req.headers["content-type"],
   }));
-  console.log("[Webhook] Query params:", JSON.stringify(req.query));
+  verbose("Webhook", "Query params:", JSON.stringify(req.query));
 
   const signature = req.headers["x-webhook-signature"] as string | undefined;
   const timestamp = req.headers["x-webhook-timestamp"] as string | undefined;
@@ -44,51 +45,51 @@ router.post("/partner", async (req, res) => {
   const partnerName = partnerNameQuery ?? partnerNameHeader;
 
   if (!partnerName) {
-    console.log("[Webhook] REJECTED: No partner name provided");
+    error("Webhook", "REJECTED: No partner name provided");
     return res
       .status(400)
       .json({ message: "Missing partner name. Provide ?name=appsumo or x-partner-name header." });
   }
 
-  console.log("[Webhook] Partner name:", partnerName);
+  verbose("Webhook", "Partner name:", partnerName);
   const partner = await storage.getPartner(partnerName);
   if (!partner) {
-    console.log("[Webhook] REJECTED: Partner not found:", partnerName);
+    error("Webhook", "REJECTED: Partner not found:", partnerName);
     return res.status(404).json({ message: "Partner not found" });
   }
-  console.log("[Webhook] Partner found:", { id: partner.id, name: partner.name, isActive: partner.isActive });
+  verbose("Webhook", "Partner found:", { id: partner.id, name: partner.name, isActive: partner.isActive });
 
   if (!partner.isActive) {
-    console.log("[Webhook] REJECTED: Partner is inactive");
+    error("Webhook", "REJECTED: Partner is inactive");
     return res.status(403).json({ message: "Partner is inactive" });
   }
 
   if (partner.webhookSecret && signature && timestamp) {
-    console.log("[Webhook] Validating HMAC signature...");
+    verbose("Webhook", "Validating HMAC signature...");
     const rawBody =
       typeof (req as any).rawBody === "object"
         ? Buffer.from((req as any).rawBody).toString("utf-8")
         : JSON.stringify(req.body);
 
     const isValid = validateHmacSignature(rawBody, timestamp, signature, partner.webhookSecret);
-    console.log("[Webhook] HMAC validation result:", isValid);
+    verbose("Webhook", "HMAC validation result:", isValid);
     if (!isValid) {
-      console.log("[Webhook] REJECTED: Invalid webhook signature");
+      error("Webhook", "REJECTED: Invalid webhook signature");
       return res.status(401).json({ message: "Invalid webhook signature" });
     }
   } else {
-    console.log("[Webhook] Skipping HMAC validation (no secret/signature)");
+    verbose("Webhook", "Skipping HMAC validation (no secret/signature)");
   }
 
   const parsed = webhookPayloadSchema.safeParse(req.body);
   if (!parsed.success) {
-    console.log("[Webhook] REJECTED: Invalid payload:", JSON.stringify(parsed.error.flatten()));
+    error("Webhook", "REJECTED: Invalid payload:", JSON.stringify(parsed.error.flatten()));
     return res.status(400).json({ message: "Invalid payload", error: parsed.error.flatten() });
   }
 
   const payload = parsed.data;
-  console.log("[Webhook] Parsed event:", payload.event, "| license_key:", payload.license_key?.slice(0, 8), "| tier:", payload.tier);
-  console.log("[Webhook] Add-on fields:", {
+  log("Webhook", `Received event: ${payload.event} | license_key: ${payload.license_key?.slice(0, 8) ?? "N/A"} | tier: ${payload.tier ?? "N/A"}`);
+  verbose("Webhook", "Add-on fields:", {
     unit_quantity: payload.unit_quantity ?? "NOT_SENT",
     partner_plan_name: payload.partner_plan_name ?? "NOT_SENT",
     license_status: payload.license_status ?? "NOT_SENT",
@@ -97,7 +98,7 @@ router.post("/partner", async (req, res) => {
   });
 
   if (payload.event === "test" || payload.test) {
-    console.log("[Webhook] Test event — acknowledging");
+    log("Webhook", "Test event — acknowledging");
     return res.json({ event: "test", success: true });
   }
 
@@ -105,45 +106,45 @@ router.post("/partner", async (req, res) => {
 
   switch (payload.event) {
     case "purchase": {
-      console.log("[Webhook:purchase] ─── Processing purchase event ───");
+      log("Webhook:purchase", "Processing purchase event");
       if (!payload.license_key || payload.tier === undefined) {
-        console.log("[Webhook:purchase] REJECTED: Missing license_key or tier");
+        error("Webhook:purchase", "REJECTED: Missing license_key or tier");
         return res.status(400).json({ message: "license_key and tier required for purchase" });
       }
-      console.log("[Webhook:purchase] Key:", payload.license_key.slice(0, 8) + "...", "| Tier:", payload.tier);
+      log("Webhook:purchase", `Key: ${payload.license_key.slice(0, 8)}... | Tier: ${payload.tier}`);
       await storage.handlePurchaseEvent(partner.id, payload.license_key, payload.tier, webhookData);
-      console.log("[Webhook:purchase] SUCCESS — license stored in DB");
+      log("Webhook:purchase", "SUCCESS — license stored in DB");
       return res.json({ event: "purchase", success: true });
     }
 
     case "activate": {
-      console.log("[Webhook:activate] ─── Processing activate event ───");
+      log("Webhook:activate", "Processing activate event");
       if (!payload.license_key) {
-        console.log("[Webhook:activate] REJECTED: Missing license_key");
+        error("Webhook:activate", "REJECTED: Missing license_key");
         return res.status(400).json({ message: "license_key required for activate" });
       }
-      console.log("[Webhook:activate] Key:", payload.license_key.slice(0, 8) + "...");
+      log("Webhook:activate", `Key: ${payload.license_key.slice(0, 8)}...`);
       await storage.handleActivateEvent(partner.id, payload.license_key, webhookData);
-      console.log("[Webhook:activate] SUCCESS — license activated");
+      log("Webhook:activate", "SUCCESS — license activated");
       return res.json({ event: "activate", success: true });
     }
 
     case "upgrade": {
-      console.log("[Webhook:upgrade] ─── Processing upgrade event ───");
+      log("Webhook:upgrade", "Processing upgrade event");
       // AppSumo sends: license_key = new key, prev_license_key = old key, tier = new tier
       const upgradeNewKey = payload.license_key ?? payload.new_license_key;
       const upgradeNewTier = payload.tier ?? payload.new_tier;
       if (!payload.prev_license_key || !upgradeNewKey || upgradeNewTier === undefined) {
-        console.log("[Webhook:upgrade] REJECTED: Missing fields. prev_license_key:", payload.prev_license_key, "newKey:", upgradeNewKey, "newTier:", upgradeNewTier);
+        error("Webhook:upgrade", "REJECTED: Missing fields", { prev_license_key: payload.prev_license_key, newKey: upgradeNewKey, newTier: upgradeNewTier });
         return res.status(400).json({
           message: "prev_license_key, license_key, and tier required for upgrade",
         });
       }
-      console.log("[Webhook:upgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", upgradeNewKey.slice(0, 8) + "...", "| New tier:", upgradeNewTier);
+      log("Webhook:upgrade", `Prev key: ${payload.prev_license_key.slice(0, 8)}... | New key: ${upgradeNewKey.slice(0, 8)}... | New tier: ${upgradeNewTier}`);
 
       // Fetch Heimdall data from the old key BEFORE updating it
       const upgradePrevLicense = await storage.getLicenseByKey(payload.prev_license_key);
-      console.log("[Webhook:upgrade] Previous license Heimdall data:", {
+      verbose("Webhook:upgrade", "Previous license Heimdall data:", {
         heimdallWorkspaceId: upgradePrevLicense?.heimdallWorkspaceId,
         heimdallUserId: upgradePrevLicense?.heimdallUserId,
         redeemerEmail: upgradePrevLicense?.redeemerEmail,
@@ -156,26 +157,26 @@ router.post("/partner", async (req, res) => {
         upgradeNewTier,
         webhookData
       );
-      console.log("[Webhook:upgrade] Local DB updated");
+      log("Webhook:upgrade", "Local DB updated");
 
       const upgradeUnitQty = payload.unit_quantity ?? 0;
-      console.log("[Webhook:upgrade] unit_quantity:", upgradeUnitQty, "| partner_plan_name:", payload.partner_plan_name ?? "none");
+      verbose("Webhook:upgrade", `unit_quantity: ${upgradeUnitQty} | partner_plan_name: ${payload.partner_plan_name ?? "none"}`);
 
       // Sync plan change to Heimdall
       let heimdallSyncSuccess = false;
       if (upgradePrevLicense?.heimdallWorkspaceId && upgradePrevLicense?.redeemerEmail) {
         try {
-          console.log("[Webhook:upgrade] Syncing plan change to Heimdall...");
+          log("Webhook:upgrade", "Syncing plan change to Heimdall...");
           await updateWorkspacePlanForUser(
             upgradePrevLicense.heimdallWorkspaceId,
             upgradeNewTier,
             upgradeNewKey,
             upgradePrevLicense.redeemerEmail
           );
-          console.log("[Webhook:upgrade] Heimdall plan sync SUCCESS");
+          log("Webhook:upgrade", "Heimdall plan sync SUCCESS");
           heimdallSyncSuccess = true;
         } catch (err) {
-          console.error("[Webhook:upgrade] Heimdall sync FAILED:", err);
+          error("Webhook:upgrade", "Heimdall sync FAILED:", err);
           // Return 500 so AppSumo retries the webhook
           return res.status(500).json({
             event: "upgrade",
@@ -184,7 +185,7 @@ router.post("/partner", async (req, res) => {
           });
         }
       } else {
-        console.log("[Webhook:upgrade] No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
+        log("Webhook:upgrade", "No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
         heimdallSyncSuccess = true; // Nothing to sync is not a failure
       }
 
@@ -192,42 +193,42 @@ router.post("/partner", async (req, res) => {
       let creditsUpdated = false;
       if (upgradeUnitQty > 0 && upgradePrevLicense?.heimdallWorkspaceId) {
         try {
-          console.log("[Webhook:upgrade] Add-on detected — updating monthly credit allowance...");
+          log("Webhook:upgrade", "Add-on detected — updating monthly credit allowance...");
           await updateAddOnCredits(
             upgradePrevLicense.heimdallWorkspaceId,
             upgradeUnitQty,
             upgradeNewTier
           );
           creditsUpdated = true;
-          console.log("[Webhook:upgrade] Monthly credit allowance updated successfully");
+          log("Webhook:upgrade", "Monthly credit allowance updated successfully");
         } catch (err) {
-          console.error("[Webhook:upgrade] Credit allowance update FAILED (non-blocking):", err);
+          error("Webhook:upgrade", "Credit allowance update FAILED (non-blocking):", err);
           // Don't return 500 for credit failures — the plan upgrade succeeded.
           // Credits can be manually reconciled.
         }
       } else if (upgradeUnitQty > 0) {
-        console.log("[Webhook:upgrade] Add-on detected but no workspace ID — cannot update credits");
+        log("Webhook:upgrade", "Add-on detected but no workspace ID — cannot update credits");
       }
 
       return res.json({ event: "upgrade", success: true, heimdallSynced: heimdallSyncSuccess, creditsUpdated });
     }
 
     case "downgrade": {
-      console.log("[Webhook:downgrade] ─── Processing downgrade event ───");
+      log("Webhook:downgrade", "Processing downgrade event");
       // AppSumo sends: license_key = new key, prev_license_key = old key, tier = new tier
       const downgradeNewKey = payload.license_key ?? payload.new_license_key;
       const downgradeNewTier = payload.tier ?? payload.new_tier;
       if (!payload.prev_license_key || !downgradeNewKey || downgradeNewTier === undefined) {
-        console.log("[Webhook:downgrade] REJECTED: Missing fields. prev_license_key:", payload.prev_license_key, "newKey:", downgradeNewKey, "newTier:", downgradeNewTier);
+        error("Webhook:downgrade", "REJECTED: Missing fields", { prev_license_key: payload.prev_license_key, newKey: downgradeNewKey, newTier: downgradeNewTier });
         return res.status(400).json({
           message: "prev_license_key, license_key, and tier required for downgrade",
         });
       }
-      console.log("[Webhook:downgrade] Prev key:", payload.prev_license_key.slice(0, 8) + "...", "| New key:", downgradeNewKey.slice(0, 8) + "...", "| New tier:", downgradeNewTier);
+      log("Webhook:downgrade", `Prev key: ${payload.prev_license_key.slice(0, 8)}... | New key: ${downgradeNewKey.slice(0, 8)}... | New tier: ${downgradeNewTier}`);
 
       // Fetch Heimdall data from the old key BEFORE updating it
       const downgradePrevLicense = await storage.getLicenseByKey(payload.prev_license_key);
-      console.log("[Webhook:downgrade] Previous license Heimdall data:", {
+      verbose("Webhook:downgrade", "Previous license Heimdall data:", {
         heimdallWorkspaceId: downgradePrevLicense?.heimdallWorkspaceId,
         heimdallUserId: downgradePrevLicense?.heimdallUserId,
         redeemerEmail: downgradePrevLicense?.redeemerEmail,
@@ -240,23 +241,23 @@ router.post("/partner", async (req, res) => {
         downgradeNewTier,
         webhookData
       );
-      console.log("[Webhook:downgrade] Local DB updated");
+      log("Webhook:downgrade", "Local DB updated");
 
       // Sync plan change to Heimdall
       let downgradeSyncSuccess = false;
       if (downgradePrevLicense?.heimdallWorkspaceId && downgradePrevLicense?.redeemerEmail) {
         try {
-          console.log("[Webhook:downgrade] Syncing plan change to Heimdall...");
+          log("Webhook:downgrade", "Syncing plan change to Heimdall...");
           await updateWorkspacePlanForUser(
             downgradePrevLicense.heimdallWorkspaceId,
             downgradeNewTier,
             downgradeNewKey,
             downgradePrevLicense.redeemerEmail
           );
-          console.log("[Webhook:downgrade] Heimdall plan sync SUCCESS");
+          log("Webhook:downgrade", "Heimdall plan sync SUCCESS");
           downgradeSyncSuccess = true;
         } catch (err) {
-          console.error("[Webhook:downgrade] Heimdall sync FAILED:", err);
+          error("Webhook:downgrade", "Heimdall sync FAILED:", err);
           // Return 500 so AppSumo retries the webhook
           return res.status(500).json({
             event: "downgrade",
@@ -265,7 +266,7 @@ router.post("/partner", async (req, res) => {
           });
         }
       } else {
-        console.log("[Webhook:downgrade] No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
+        log("Webhook:downgrade", "No Heimdall workspace or redeemer email on previous key — skipping sync (user may not have redeemed yet)");
         downgradeSyncSuccess = true; // Nothing to sync is not a failure
       }
 
@@ -273,12 +274,12 @@ router.post("/partner", async (req, res) => {
     }
 
     case "deactivate": {
-      console.log("[Webhook:deactivate] ─── Processing deactivate event ───");
+      log("Webhook:deactivate", "Processing deactivate event");
       if (!payload.license_key) {
-        console.log("[Webhook:deactivate] REJECTED: Missing license_key");
+        error("Webhook:deactivate", "REJECTED: Missing license_key");
         return res.status(400).json({ message: "license_key required for deactivate" });
       }
-      console.log("[Webhook:deactivate] Key:", payload.license_key.slice(0, 8) + "...");
+      log("Webhook:deactivate", `Key: ${payload.license_key.slice(0, 8)}...`);
 
       // Check the license status BEFORE marking it deactivated
       // If the key was already "upgraded" or "downgraded", another key has taken over.
@@ -287,16 +288,15 @@ router.post("/partner", async (req, res) => {
       const licenseBeforeDeactivate = await storage.getLicenseByKey(payload.license_key);
       const statusBeforeDeactivate = licenseBeforeDeactivate?.status;
       const deactivateReason = (payload.extra as Record<string, unknown>)?.reason as string ?? "";
-      console.log("[Webhook:deactivate] Status before deactivate:", statusBeforeDeactivate ?? "NOT_IN_DB");
-      console.log("[Webhook:deactivate] Reason:", deactivateReason);
+      log("Webhook:deactivate", `Status before deactivate: ${statusBeforeDeactivate ?? "NOT_IN_DB"} | Reason: ${deactivateReason}`);
 
       const wasUpgradedOrDowngraded = statusBeforeDeactivate === "upgraded" || statusBeforeDeactivate === "downgraded";
       if (wasUpgradedOrDowngraded) {
-        console.log("[Webhook:deactivate] Key was already", statusBeforeDeactivate, "— another key has taken over. Skipping Heimdall restore and Track cancel.");
+        log("Webhook:deactivate", `Key was already ${statusBeforeDeactivate} — another key has taken over. Skipping Heimdall restore and Track cancel.`);
       }
 
       await storage.handleDeactivateEvent(partner.id, payload.license_key, webhookData);
-      console.log("[Webhook:deactivate] Local DB updated — license deactivated");
+      log("Webhook:deactivate", "Local DB updated — license deactivated");
 
       // If the key was upgraded/downgraded, just update DB status and return.
       // Do NOT restore Heimdall or cancel subscription — the new key handles that.
@@ -306,7 +306,7 @@ router.post("/partner", async (req, res) => {
 
       // Move user to free plan on Heimdall (only for actual refunds/cancellations)
       const deactivatedLicense = await storage.getLicenseByKey(payload.license_key);
-      console.log("[Webhook:deactivate] License Heimdall data:", {
+      verbose("Webhook:deactivate", "License Heimdall data:", {
         heimdallWorkspaceId: deactivatedLicense?.heimdallWorkspaceId,
         redeemerEmail: deactivatedLicense?.redeemerEmail,
       });
@@ -315,7 +315,7 @@ router.post("/partner", async (req, res) => {
         try {
           const restorePlanId = deactivatedLicense.previousPlanId || null;
           const restorePlanType = deactivatedLicense.previousPlanType || "FREEMIUM";
-          console.log("[Webhook:deactivate] Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
+          verbose("Webhook:deactivate", "Restoring workspace to previous plan:", { restorePlanId, restorePlanType });
 
           // Fetch existing user to get their real name before calling user/add
           const deactivateUser = await findHeimdallUser(deactivatedLicense.redeemerEmail);
@@ -339,12 +339,12 @@ router.post("/partner", async (req, res) => {
           });
 
           const heimdallData = (await heimdallRes.json()) as Record<string, unknown>;
-          console.log("[Webhook:deactivate] Heimdall response:", JSON.stringify(heimdallData).slice(0, 300));
+          verbose("Webhook:deactivate", "Heimdall response:", JSON.stringify(heimdallData).slice(0, 300));
 
           if (heimdallData.status === "success") {
-            console.log("[Webhook:deactivate] Workspace moved to free plan SUCCESS");
+            log("Webhook:deactivate", "Workspace moved to free plan SUCCESS");
           } else {
-            console.error("[Webhook:deactivate] Heimdall returned status:failed:", JSON.stringify(heimdallData));
+            error("Webhook:deactivate", "Heimdall returned status:failed:", JSON.stringify(heimdallData));
             return res.status(500).json({
               event: "deactivate",
               success: false,
@@ -352,7 +352,7 @@ router.post("/partner", async (req, res) => {
             });
           }
         } catch (err) {
-          console.error("[Webhook:deactivate] Heimdall free plan sync FAILED:", err);
+          error("Webhook:deactivate", "Heimdall free plan sync FAILED:", err);
           return res.status(500).json({
             event: "deactivate",
             success: false,
@@ -360,39 +360,39 @@ router.post("/partner", async (req, res) => {
           });
         }
       } else {
-        console.log("[Webhook:deactivate] No Heimdall workspace ID or redeemer email — skipping Heimdall restore (user may not have redeemed)");
+        log("Webhook:deactivate", "No Heimdall workspace ID or redeemer email — skipping Heimdall restore (user may not have redeemed)");
       }
 
       // Cancel subscription in tiny-track so monthly credit grants stop
       let subscriptionCancelled = false;
       if (deactivatedLicense?.heimdallWorkspaceId) {
         try {
-          console.log("[Webhook:deactivate] Cancelling tiny-track subscription for workspace:", deactivatedLicense.heimdallWorkspaceId);
+          log("Webhook:deactivate", `Cancelling tiny-track subscription for workspace: ${deactivatedLicense.heimdallWorkspaceId}`);
           await cancelSubscription(
             deactivatedLicense.heimdallWorkspaceId,
             `AppSumo license deactivated/refunded (license_key: ${payload.license_key})`
           );
           subscriptionCancelled = true;
-          console.log("[Webhook:deactivate] Tiny-track subscription cancelled successfully");
+          log("Webhook:deactivate", "Tiny-track subscription cancelled successfully");
         } catch (err) {
-          console.error("[Webhook:deactivate] Tiny-track subscription cancel FAILED (non-blocking):", err);
+          error("Webhook:deactivate", "Tiny-track subscription cancel FAILED (non-blocking):", err);
           // Non-blocking — Heimdall plan already restored. Subscription can be manually cancelled.
         }
       } else {
-        console.log("[Webhook:deactivate] No workspace ID — skipping tiny-track subscription cancel");
+        log("Webhook:deactivate", "No workspace ID — skipping tiny-track subscription cancel");
       }
 
       return res.json({ event: "deactivate", success: true, subscriptionCancelled });
     }
 
     case "migrate": {
-      console.log("[Webhook:migrate] ─── Processing migrate event ───");
-      console.log("[Webhook:migrate] Full payload:", JSON.stringify(webhookData));
+      log("Webhook:migrate", "Processing migrate event");
+      verbose("Webhook:migrate", "Full payload:", JSON.stringify(webhookData));
       return res.json({ event: "migrate", success: true });
     }
 
     default:
-      console.log("[Webhook] REJECTED: Unknown event:", payload.event);
+      error("Webhook", "REJECTED: Unknown event:", payload.event);
       return res.status(400).json({ message: `Unknown event: ${payload.event}` });
   }
 });
