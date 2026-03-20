@@ -29,6 +29,17 @@ function logHeaders(headers: Record<string, string>): void {
   }));
 }
 
+function logCurl(method: string, url: string, headers: Record<string, string>, body?: string): void {
+  const parts = [`curl -X ${method} '${url}'`];
+  for (const [key, value] of Object.entries(headers)) {
+    parts.push(`-H '${key}: ${value}'`);
+  }
+  if (body) {
+    parts.push(`-d '${body}'`);
+  }
+  console.log("[Track:curl]", parts.join(" \\\n  "));
+}
+
 // ─── Resolve workspace ID (externalId) to internal customerId ─────────────────
 // Workspace ID from Heimdall = externalId in tiny-track's customer model.
 // We must resolve it to the internal customerId before querying subscriptions.
@@ -42,6 +53,7 @@ async function resolveCustomerId(
   console.log("[Track:resolveCustomer] URL:", url);
   console.log("[Track:resolveCustomer] Method: GET");
   logHeaders(headers);
+  logCurl("GET", url, headers);
 
   const res = await fetch(url, { headers });
 
@@ -89,6 +101,7 @@ async function getSubscriptionByCustomer(
   console.log("[Track:getSub] URL:", url);
   console.log("[Track:getSub] Method: GET");
   logHeaders(headers);
+  logCurl("GET", url, headers);
 
   const res = await fetch(url, { headers });
 
@@ -136,6 +149,7 @@ async function getPlanCreditAllowance(planId: string): Promise<number> {
   console.log("[Track:getPlan] URL:", url);
   console.log("[Track:getPlan] Method: GET");
   logHeaders(headers);
+  logCurl("GET", url, headers);
 
   const res = await fetch(url, { headers });
 
@@ -177,6 +191,7 @@ async function updateSubscriptionCreditAllowance(
   console.log("[Track:updateSub] Method: PUT");
   logHeaders(headers);
   console.log("[Track:updateSub] Request body:", JSON.stringify(requestBody));
+  logCurl("PUT", url, headers, JSON.stringify(requestBody));
 
   const res = await fetch(url, {
     method: "PUT",
@@ -251,6 +266,7 @@ export async function cancelSubscription(
   console.log("[Track:cancel] Method: POST");
   logHeaders(headers);
   console.log("[Track:cancel] Request body:", JSON.stringify(requestBody));
+  logCurl("POST", url, headers, JSON.stringify(requestBody));
 
   const res = await fetch(url, {
     method: "POST",
