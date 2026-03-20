@@ -258,6 +258,7 @@ async function addWorkspacePlan(
     workspaceId: string | null;
     ownerId: string;
     workspaceName: string;
+    licenseKey: string;
     planId: string;
     planType: string;
   }
@@ -268,14 +269,11 @@ async function addWorkspacePlan(
   console.log("[Heimdall:4-addWorkspace] URL:", url);
   console.log("[Heimdall:4-addWorkspace] Mode:", params.workspaceId ? "UPDATE existing" : "CREATE new");
 
-  // Do NOT send license_code / license_provider here.
-  // Heimdall passes these to tiny-track's upsert_track_customer queue job,
-  // which triggers handleLicenseAndSubscription() and creates a DUPLICATE
-  // subscription alongside the default plan subscription.
-  // Heimdall only needs plan_id and type to set the workspace plan correctly.
   const body: Record<string, unknown> = {
     owner_id: params.ownerId,
     name: params.workspaceName,
+    license_code: params.licenseKey,
+    license_provider: "appsumo",
     plan_id: params.planId,
     type: params.planType,
   };
@@ -480,6 +478,8 @@ export async function updateWorkspacePlanForUser(
   const url = `${HEIMDALL_BASE}/service/v0/workspace/add`;
   const requestBody = {
     _id: workspaceId,
+    license_code: licenseKey,
+    license_provider: "appsumo",
     plan_id: planId,
     type: planType,
   };
@@ -566,6 +566,7 @@ export async function provisionAccount(
     workspaceId: existingWorkspace?.workspaceId ?? null,
     ownerId: userId,
     workspaceName,
+    licenseKey,
     planId,
     planType,
   });
